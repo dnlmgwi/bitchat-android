@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.kotlin.compose)
+    kotlin("kapt")
 }
 
 android {
@@ -91,6 +92,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.media)
     
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -141,6 +143,10 @@ dependencies {
 
     // Security preferences
     implementation(libs.androidx.security.crypto)
+    
+    // Room Database
+    implementation(libs.bundles.room)
+    kapt(libs.androidx.room.compiler)
     
     // EXIF orientation handling for images
     implementation("androidx.exifinterface:exifinterface:1.3.7")

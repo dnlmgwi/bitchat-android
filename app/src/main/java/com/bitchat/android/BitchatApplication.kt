@@ -4,11 +4,14 @@ import android.app.Application
 import com.bitchat.android.nostr.RelayDirectory
 import com.bitchat.android.ui.theme.ThemePreferenceManager
 import com.bitchat.android.net.ArtiTorManager
+import com.bitchat.android.music.MusicNotificationManager
 
 /**
  * Main application class for bitchat Android
  */
 class BitchatApplication : Application() {
+    
+    private var musicNotificationManager: MusicNotificationManager? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -50,9 +53,33 @@ class BitchatApplication : Application() {
         // Initialize mesh service preferences
         try { com.bitchat.android.service.MeshServicePreferences.init(this) } catch (_: Exception) { }
 
+        // Initialize aggregator mode preferences
+        try { com.bitchat.android.service.AggregatorModePreferenceManager.init(this) } catch (_: Exception) { }
+
         // Proactively start the foreground service to keep mesh alive
         try { com.bitchat.android.service.MeshForegroundService.start(this) } catch (_: Exception) { }
 
         // TorManager already initialized above
+    }
+    
+    /**
+     * Initialize music notification manager with player service
+     */
+    fun initializeMusicNotificationManager(musicPlayerService: com.bitchat.android.music.MusicPlayerService) {
+        if (musicNotificationManager == null) {
+            musicNotificationManager = MusicNotificationManager(this, musicPlayerService)
+        }
+    }
+    
+    /**
+     * Get the music notification manager instance
+     */
+    fun getMusicNotificationManager(): MusicNotificationManager? {
+        return musicNotificationManager
+    }
+    
+    override fun onTerminate() {
+        super.onTerminate()
+        musicNotificationManager?.cleanup()
     }
 }

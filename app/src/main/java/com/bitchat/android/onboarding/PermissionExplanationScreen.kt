@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -219,6 +220,7 @@ private fun getPermissionIcon(permissionType: PermissionType): ImageVector {
         PermissionType.MICROPHONE -> Icons.Filled.Mic
         PermissionType.NOTIFICATIONS -> Icons.Filled.Notifications
         PermissionType.BATTERY_OPTIMIZATION -> Icons.Filled.Power
+        PermissionType.MEDIA_AUDIO -> Icons.Filled.Storage
         PermissionType.OTHER -> Icons.Filled.Settings
     }
 }

@@ -99,6 +99,20 @@ class BluetoothMeshService(private val context: Context) {
             }
         )
 
+        // Initialize aggregator mode integration
+        val aggregatorModeManager = com.bitchat.android.service.AggregatorModeManager.getInstance()
+        aggregatorModeManager.onAggregatorModeChanged = { enabled, aggregatorId ->
+            if (enabled) {
+                Log.i(TAG, "Aggregator mode enabled: $aggregatorId")
+                aggregatorModeManager.updateSyncStatus("Active")
+                // Increase sync frequency and packet retention for aggregator mode
+                gossipSyncManager.scheduleInitialSync(1_000L) // More frequent initial sync
+            } else {
+                Log.i(TAG, "Aggregator mode disabled")
+                aggregatorModeManager.updateSyncStatus("Idle")
+            }
+        }
+
         // Wire sync manager delegate
         gossipSyncManager.delegate = object : GossipSyncManager.Delegate {
             override fun sendPacket(packet: BitchatPacket) {
@@ -498,7 +512,11 @@ class BluetoothMeshService(private val context: Context) {
                         }
                     }
                     // Track for sync
-                    try { gossipSyncManager.onPublicPacketSeen(routed.packet) } catch (_: Exception) { }
+                    try { 
+                        gossipSyncManager.onPublicPacketSeen(routed.packet)
+                        // Track for aggregator mode
+                        com.bitchat.android.service.AggregatorModeManager.getInstance().onPacketAggregated()
+                    } catch (_: Exception) { }
                 }
             }
             

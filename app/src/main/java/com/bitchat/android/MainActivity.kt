@@ -38,6 +38,7 @@ import com.bitchat.android.onboarding.PermissionExplanationScreen
 import com.bitchat.android.onboarding.PermissionManager
 import com.bitchat.android.ui.ChatScreen
 import com.bitchat.android.ui.ChatViewModel
+import com.bitchat.android.ui.MainNavigationScreen
 import com.bitchat.android.ui.OrientationAwareActivity
 import com.bitchat.android.ui.theme.BitchatTheme
 import com.bitchat.android.nostr.PoWPreferenceManager
@@ -287,7 +288,7 @@ class MainActivity : OrientationAwareActivity() {
             }
 
             OnboardingState.CHECKING, OnboardingState.INITIALIZING, OnboardingState.COMPLETE -> {
-                // Set up back navigation handling for the chat screen
+                // Set up back navigation handling for the main navigation screen
                 val backCallback = object : OnBackPressedCallback(true) {
                     override fun handleOnBackPressed() {
                         // Let ChatViewModel handle navigation state
@@ -304,7 +305,10 @@ class MainActivity : OrientationAwareActivity() {
 
                 // Add the callback - this will be automatically removed when the activity is destroyed
                 onBackPressedDispatcher.addCallback(this, backCallback)
-                ChatScreen(viewModel = chatViewModel)
+                MainNavigationScreen(
+                    chatViewModel = chatViewModel,
+                    meshService = meshService
+                )
             }
             
             OnboardingState.ERROR -> {
@@ -712,6 +716,7 @@ class MainActivity : OrientationAwareActivity() {
         if (mainViewModel.onboardingState.value == OnboardingState.COMPLETE) {
             handleNotificationIntent(intent)
             handleVerificationIntent(intent)
+            handleMusicPlayerIntent(intent)
         }
     }
     
@@ -820,6 +825,22 @@ class MainActivity : OrientationAwareActivity() {
         val qr = VerificationService.verifyScannedQR(uri.toString())
         if (qr != null) {
             chatViewModel.beginQRVerification(qr)
+        }
+    }
+
+    /**
+     * Handle intents from music notification clicks - open music player
+     */
+    private fun handleMusicPlayerIntent(intent: Intent) {
+        val shouldOpenMusicPlayer = intent.getBooleanExtra("open_music_player", false)
+        
+        if (shouldOpenMusicPlayer) {
+            Log.d("MainActivity", "Opening music player from notification")
+            
+            // Navigate to music player screen
+            // This would typically involve updating the navigation state
+            // For now, we'll just log that the intent was received
+            // In a full implementation, you'd navigate to the music screen
         }
     }
 

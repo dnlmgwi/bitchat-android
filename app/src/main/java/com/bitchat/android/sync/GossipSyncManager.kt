@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Tracks seen public packets (ANNOUNCE, broadcast MESSAGE) and periodically requests sync
  * from neighbors. Responds to REQUEST_SYNC by sending missing packets.
  */
+@OptIn(ExperimentalStdlibApi::class)
 class GossipSyncManager(
     private val myPeerID: String,
     private val scope: CoroutineScope,
@@ -146,6 +147,14 @@ class GossipSyncManager(
         // Sign and broadcast
         val signed = delegate?.signPacketForBroadcast(packet) ?: packet
         delegate?.sendPacket(signed)
+        
+        // Update aggregator mode status if enabled
+        try {
+            val aggregatorManager = com.bitchat.android.service.AggregatorModeManager.getInstance()
+            if (aggregatorManager.isEnabled.value) {
+                aggregatorManager.updateSyncStatus("Syncing")
+            }
+        } catch (_: Exception) { }
     }
 
     private fun sendRequestSyncToPeer(peerID: String) {
@@ -201,6 +210,14 @@ class GossipSyncManager(
                 Log.d(TAG, "Sent sync message: Type ${toSend.type} to $fromPeerID packet id ${idBytes.toHexString()}")
             }
         }
+        
+        // Update aggregator mode status if enabled
+        try {
+            val aggregatorManager = com.bitchat.android.service.AggregatorModeManager.getInstance()
+            if (aggregatorManager.isEnabled.value) {
+                aggregatorManager.updateSyncStatus("Active")
+            }
+        } catch (_: Exception) { }
     }
 
     private fun hexStringToByteArray(hexString: String): ByteArray {

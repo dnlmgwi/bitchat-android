@@ -8,6 +8,7 @@ import android.util.Log
 
 /**
  * Message types - exact same as iOS version with Noise Protocol support
+ * Extended with Music Analytics message types (0x30-0x3F range)
  */
 enum class MessageType(val value: UByte) {
     ANNOUNCE(0x01u),
@@ -17,7 +18,24 @@ enum class MessageType(val value: UByte) {
     NOISE_ENCRYPTED(0x11u),  // Noise encrypted transport message
     FRAGMENT(0x20u), // Fragmentation for large packets
     REQUEST_SYNC(0x21u), // GCS-based sync request
-    FILE_TRANSFER(0x22u); // New: File transfer packet (BLE voice notes, etc.)
+    FILE_TRANSFER(0x22u), // New: File transfer packet (BLE voice notes, etc.)
+    
+    // Music Analytics message types (0x30-0x3F range)
+    PLAYBACK_BATCH(0x30u), // Batch of playback records (up to 100 records per message)
+    TRACK_META(0x31u), // Track metadata for new content_ids
+    DEVICE_REGISTER(0x32u), // Register device public key with aggregator
+    SYNC_ACK(0x33u), // Acknowledgment with list of received record_ids
+    AGGREGATOR_BEACON(0x34u), // Aggregator advertising its presence and capacity
+    
+    // Music Sharing message types (0x35-0x3F range)
+    MUSIC_SHARE_ANNOUNCEMENT(0x35u), // Broadcast announcement of available music
+    MUSIC_SHARE_OFFER(0x36u), // Direct sharing offer to specific device
+    MUSIC_SHARE_REQUEST(0x37u), // Request for shared music file
+    MUSIC_SHARE_RESPONSE(0x38u), // Response to sharing request (accept/reject)
+    MUSIC_FILE_CHUNK(0x39u), // File transfer chunk for actual file data
+    MUSIC_TRANSFER_STATUS(0x3Au), // Transfer status update message
+    SHARING_RECORD(0x3Bu), // Individual sharing record for analytics
+    SHARING_BATCH(0x3Cu); // Batch of sharing records for analytics
 
     companion object {
         fun fromValue(value: UByte): MessageType? {

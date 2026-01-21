@@ -1,7 +1,7 @@
 [versions]
 # Android and Kotlin
 agp = "8.10.1"
-kotlin = "2.2.0"
+kotlin = "2.0.21"
 compileSdk = "35"
 minSdk = "26" # API 26 for proper BLE support
 targetSdk = "35"
@@ -11,6 +11,7 @@ core-ktx = "1.16.0"
 lifecycle-runtime = "2.9.1"
 activity-compose = "1.10.1"
 appcompat = "1.7.1"
+media = "1.7.1"
 
 # Compose
 compose-bom = "2025.06.01"
@@ -45,6 +46,9 @@ gms-location = "21.3.0"
 # Security
 security-crypto = "1.1.0-beta01"
 
+# Room Database
+room = "2.7.0-alpha12"
+
 # QR
 zxing-core = "3.5.4"
 
@@ -70,6 +74,7 @@ androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", 
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle-runtime" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+androidx-media = { module = "androidx.media:media", version.ref = "media" }
 
 # Compose
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
@@ -113,6 +118,11 @@ gms-location = { module = "com.google.android.gms:play-services-location", versi
 
 # Security
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "security-crypto" }
+
+# Room Database
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 
 # QR
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing-core" }
@@ -158,6 +168,11 @@ lifecycle = [
 cryptography = [
     "bouncycastle-bcprov",
     "google-tink-android"
+]
+
+room = [
+    "androidx-room-runtime",
+    "androidx-room-ktx"
 ]
 
 testing = [

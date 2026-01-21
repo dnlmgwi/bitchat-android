@@ -69,6 +69,13 @@ class PermissionManager(private val context: Context) {
             Manifest.permission.ACCESS_FINE_LOCATION
         ))
 
+        // Audio permissions for music library (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
         // Notification permission intentionally excluded to keep it optional
 
         return permissions
@@ -209,6 +216,23 @@ class PermissionManager(private val context: Context) {
             )
         )
 
+        // Audio/Media category
+        val audioPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            listOf(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+        categories.add(
+            PermissionCategory(
+                type = PermissionType.MEDIA_AUDIO,
+                description = "Access your music library for playback analytics and sharing",
+                permissions = audioPermissions,
+                isGranted = audioPermissions.all { isPermissionGranted(it) },
+                systemDescription = "Allow bitchat to access your music files"
+            )
+        )
+
         if (needsBackgroundLocationPermission()) {
             val backgroundPermission = listOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             categories.add(
@@ -309,5 +333,6 @@ enum class PermissionType(val nameValue: String) {
     MICROPHONE("Microphone"),
     NOTIFICATIONS("Notifications"),
     BATTERY_OPTIMIZATION("Battery Optimization"),
+    MEDIA_AUDIO("Music Library"),
     OTHER("Other")
 }
