@@ -35,7 +35,8 @@ enum class MessageType(val value: UByte) {
     MUSIC_FILE_CHUNK(0x39u), // File transfer chunk for actual file data
     MUSIC_TRANSFER_STATUS(0x3Au), // Transfer status update message
     SHARING_RECORD(0x3Bu), // Individual sharing record for analytics
-    SHARING_BATCH(0x3Cu); // Batch of sharing records for analytics
+    SHARING_BATCH(0x3Cu), // Batch of sharing records for analytics
+    TRANSFER_BATCH(0x3Du); // Batch of transfer records for analytics
 
     companion object {
         fun fromValue(value: UByte): MessageType? {

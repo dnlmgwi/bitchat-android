@@ -176,14 +176,15 @@ interface SharingRecordDao {
 }
 
 @Database(
-    entities = [PlaybackRecordEntity::class, TrackMetadataEntity::class, SharingRecordEntity::class],
-    version = 2,
+    entities = [PlaybackRecordEntity::class, TrackMetadataEntity::class, SharingRecordEntity::class, TransferRecordEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class MusicAnalyticsDatabase : RoomDatabase() {
     abstract fun playbackRecordDao(): PlaybackRecordDao
     abstract fun trackMetadataDao(): TrackMetadataDao
     abstract fun sharingRecordDao(): SharingRecordDao
+    abstract fun transferRecordDao(): TransferRecordDao
 }
 
 // Extension functions for entity conversion
@@ -229,6 +230,81 @@ fun SharingRecord.toEntity(): SharingRecordEntity {
         transferStatus = transferStatus.name,
         shareContext = shareContext.name,
         deviceSignature = deviceSignature
+    )
+}
+
+// Transfer Record Database Entity
+@Entity(tableName = "transfer_records")
+data class TransferRecordEntity(
+    @PrimaryKey val recordId: String,
+    val contentId: String,
+    val sourceDeviceId: String,
+    val targetDeviceId: String?,
+    val transferMethod: String,
+    val timestamp: Long,
+    val fileSize: Long,
+    val transferDuration: Long?,
+    val transferStatus: String,
+    val deviceSignature: ByteArray?,
+    val isSynced: Boolean = false,
+    val syncedAt: Long? = null
+) {
+    fun toModel(): TransferRecord {
+        return TransferRecord(
+            transferId = recordId,
+            contentId = contentId,
+            sourceDeviceId = sourceDeviceId,
+            targetDeviceId = targetDeviceId,
+            transferMethod = com.bitchat.android.music.model.TransferMethod.valueOf(transferMethod),
+            timestamp = timestamp,
+            fileSize = fileSize,
+            transferDuration = transferDuration,
+            transferStatus = com.bitchat.android.music.model.TransferStatus.valueOf(transferStatus),
+            deviceSignature = deviceSignature
+        )
+    }
+}
+
+@Dao
+interface TransferRecordDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(record: TransferRecordEntity)
+    
+    @Query("SELECT * FROM transfer_records WHERE isSynced = 0 ORDER BY timestamp ASC LIMIT :limit")
+    suspend fun getPendingSync(limit: Int): List<TransferRecordEntity>
+    
+    @Query("UPDATE transfer_records SET isSynced = 1, syncedAt = :syncTime WHERE recordId IN (:recordIds)")
+    suspend fun markAsSynced(recordIds: List<String>, syncTime: Long = System.currentTimeMillis())
+    
+    @Query("SELECT COUNT(*) FROM transfer_records")
+    suspend fun count(): Int
+    
+    @Query("SELECT COUNT(*) FROM transfer_records WHERE isSynced = 0")
+    suspend fun countPendingSync(): Int
+    
+    @Query("SELECT COUNT(*) FROM transfer_records WHERE transferStatus = 'COMPLETED'")
+    suspend fun countSuccessfulTransfers(): Int
+    
+    @Query("SELECT SUM(fileSize) FROM transfer_records WHERE transferStatus = 'COMPLETED'")
+    suspend fun getTotalBytesTransferred(): Long
+    
+    @Query("DELETE FROM transfer_records WHERE isSynced = 1 AND syncedAt < :cutoffTime")
+    suspend fun deleteOldSyncedRecords(cutoffTime: Long): Int
+}
+
+// Extension function for entity conversion
+fun TransferRecord.toEntity(): TransferRecordEntity {
+    return TransferRecordEntity(
+        recordId = this.transferId,
+        contentId = this.contentId,
+        sourceDeviceId = this.sourceDeviceId,
+        targetDeviceId = this.targetDeviceId,
+        transferMethod = this.transferMethod.name,
+        timestamp = this.timestamp,
+        fileSize = this.fileSize,
+        transferDuration = this.transferDuration,
+        transferStatus = this.transferStatus.name,
+        deviceSignature = this.deviceSignature
     )
 }
 
@@ -435,6 +511,62 @@ class PlaybackAnalyticsTracker(
     }
     
     /**
+     * Get pending transfer records for sync
+     */
+    suspend fun getPendingTransferRecordsForSync(limit: Int = BATCH_SIZE): List<TransferRecord> {
+        return withContext(Dispatchers.IO) {
+            try {
+                database.transferRecordDao()
+                    .getPendingSync(limit)
+                    .map { it.toModel() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting pending transfer records", e)
+                emptyList()
+            }
+        }
+    }
+    
+    /**
+     * Mark transfer records as synced
+     */
+    suspend fun markTransferRecordsAsSynced(recordIds: List<String>) {
+        withContext(Dispatchers.IO) {
+            try {
+                database.transferRecordDao().markAsSynced(recordIds)
+                updateStatistics()
+                Log.d(TAG, "Marked ${recordIds.size} transfer records as synced")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error marking transfer records as synced", e)
+            }
+        }
+    }
+    
+    /**
+     * Record a transfer event
+     */
+    suspend fun recordTransfer(record: TransferRecord) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Store in database
+                database.transferRecordDao().insert(record.toEntity())
+                
+                // Update statistics
+                updateStatistics()
+                
+                Log.d(TAG, "Recorded transfer: ${record.contentId} - ${record.transferMethod}")
+                
+                // Trigger sync if we have enough records
+                val pendingCount = database.transferRecordDao().countPendingSync()
+                if (pendingCount >= BATCH_SIZE) {
+                    triggerSync()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error recording transfer", e)
+            }
+        }
+    }
+    
+    /**
      * Get analytics statistics
      */
     suspend fun getAnalyticsStats(): AnalyticsStats {
@@ -512,6 +644,12 @@ class PlaybackAnalyticsTracker(
             val pendingSharingRecords = getPendingSharingRecordsForSync()
             if (pendingSharingRecords.isNotEmpty()) {
                 meshSyncManager.syncSharingRecords(pendingSharingRecords)
+            }
+            
+            // Get pending transfer records
+            val pendingTransferRecords = getPendingTransferRecordsForSync()
+            if (pendingTransferRecords.isNotEmpty()) {
+                meshSyncManager.syncTransferRecords(pendingTransferRecords)
             }
             
             _lastSyncTime.value = System.currentTimeMillis()

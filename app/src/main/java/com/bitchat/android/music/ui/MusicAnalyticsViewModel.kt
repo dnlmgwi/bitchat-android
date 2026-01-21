@@ -28,7 +28,8 @@ class MusicAnalyticsViewModel(
     private val transferTrackingService = TransferTrackingService(
         application,
         deviceIdentificationService,
-        contentIdGenerator
+        contentIdGenerator,
+        analyticsTracker
     )
     private val musicPlayerService = MusicPlayerService(
         application, 

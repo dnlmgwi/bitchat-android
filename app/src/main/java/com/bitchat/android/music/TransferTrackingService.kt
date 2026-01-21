@@ -24,7 +24,8 @@ import java.util.*
 class TransferTrackingService(
     private val context: Context,
     private val deviceIdentificationService: DeviceIdentificationService,
-    private val contentIdGenerator: ContentIdGenerator
+    private val contentIdGenerator: ContentIdGenerator,
+    private val analyticsTracker: PlaybackAnalyticsTracker
 ) {
     
     companion object {
@@ -312,6 +313,15 @@ class TransferTrackingService(
         val currentActive = _activeTransfers.value.toMutableMap()
         currentActive.remove(transfer.transferId)
         _activeTransfers.value = currentActive
+        
+        // Record in analytics tracker for mesh sync
+        serviceScope.launch {
+            try {
+                analyticsTracker.recordTransfer(transfer)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error recording transfer in analytics tracker", e)
+            }
+        }
     }
     
     /**

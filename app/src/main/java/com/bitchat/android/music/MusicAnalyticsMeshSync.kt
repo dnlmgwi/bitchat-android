@@ -153,6 +153,32 @@ class MusicAnalyticsMeshSync(
     }
     
     /**
+     * Sync transfer records to mesh network
+     */
+    suspend fun syncTransferRecords(records: List<TransferRecord>) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Add to pending queue for aggregator sync
+                val aggregators = _discoveredAggregators.value.values.sortedBy { it.currentLoad }
+                
+                if (aggregators.isEmpty()) {
+                    Log.w(TAG, "No aggregators discovered, broadcasting transfer records to mesh")
+                    broadcastTransferRecordsToMesh(records)
+                } else {
+                    // Sync to best available aggregator
+                    val bestAggregator = aggregators.first()
+                    syncTransferRecordsToAggregator(bestAggregator.aggregatorId, records)
+                }
+                
+                Log.d(TAG, "Synced ${records.size} transfer records")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error syncing transfer records", e)
+            }
+        }
+    }
+    
+    /**
      * Register as aggregator (for burning centers)
      */
     fun startAggregatorMode(aggregatorId: String, capacity: Int = 50) {
@@ -311,6 +337,71 @@ class MusicAnalyticsMeshSync(
         }
     }
     
+    private suspend fun syncTransferRecordsToAggregator(aggregatorId: String, records: List<TransferRecord>) {
+        try {
+            _syncStatus.value = SyncStatus.Syncing(aggregatorId, 0.0f)
+            
+            // Split records into batches
+            val batches = records.chunked(MAX_RECORDS_PER_BATCH)
+            var syncedCount = 0
+            
+            batches.forEachIndexed { index, batch ->
+                val batchMessage = TransferBatchMessage(
+                    batchId = UUID.randomUUID().toString(),
+                    deviceId = deviceIdentificationService.getDeviceId(),
+                    records = batch
+                )
+                
+                val packet = createPacket(MessageType.TRANSFER_BATCH, batchMessage.toBinaryPayload())
+                
+                // Send to specific aggregator (if we have a direct connection)
+                // Otherwise broadcast to mesh
+                if (meshService.hasDirectConnection(aggregatorId)) {
+                    meshService.sendPacketToPeer(aggregatorId, packet)
+                } else {
+                    meshService.broadcastMusicPacket(packet)
+                }
+                
+                syncedCount += batch.size
+                val progress = syncedCount.toFloat() / records.size.toFloat()
+                _syncStatus.value = SyncStatus.Syncing(aggregatorId, progress)
+                
+                // Wait for potential ACK
+                delay(1000L)
+            }
+            
+            Log.i(TAG, "Successfully synced $syncedCount transfer records to $aggregatorId")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing transfer records to aggregator $aggregatorId", e)
+            _syncStatus.value = SyncStatus.Error("Failed to sync transfer records to $aggregatorId: ${e.message}")
+        }
+    }
+    
+    private suspend fun broadcastTransferRecordsToMesh(records: List<TransferRecord>) {
+        try {
+            val batches = records.chunked(MAX_RECORDS_PER_BATCH)
+            
+            batches.forEach { batch ->
+                val batchMessage = TransferBatchMessage(
+                    batchId = UUID.randomUUID().toString(),
+                    deviceId = deviceIdentificationService.getDeviceId(),
+                    records = batch
+                )
+                
+                val packet = createPacket(MessageType.TRANSFER_BATCH, batchMessage.toBinaryPayload())
+                meshService.broadcastMusicPacket(packet)
+                
+                delay(500L) // Small delay between batches
+            }
+            
+            Log.d(TAG, "Broadcasted ${records.size} transfer records to mesh network")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error broadcasting transfer records to mesh", e)
+        }
+    }
+    
     private fun registerMessageHandlers() {
         // Register handlers for music analytics message types
         // This would integrate with the existing mesh service message handling
@@ -404,6 +495,7 @@ private fun BluetoothMeshService.broadcastMusicPacket(packet: BitchatPacket) {
         MessageType.DEVICE_REGISTER.value.toInt() -> "DEVICE_REGISTER"
         MessageType.PLAYBACK_BATCH.value.toInt() -> "PLAYBACK_BATCH"
         MessageType.TRACK_META.value.toInt() -> "TRACK_META"
+        MessageType.TRANSFER_BATCH.value.toInt() -> "TRANSFER_BATCH"
         else -> "UNKNOWN"
     }
     

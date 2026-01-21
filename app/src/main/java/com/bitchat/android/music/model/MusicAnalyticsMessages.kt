@@ -246,6 +246,65 @@ data class AggregatorBeaconMessage(
     }
 }
 
+/**
+ * Batch of transfer records for efficient transmission
+ * Up to 50 records per message to stay within BLE size limits
+ */
+@Parcelize
+data class TransferBatchMessage(
+    val batchId: String,
+    val deviceId: String,
+    val records: List<TransferRecord>,
+    val timestamp: Long = System.currentTimeMillis()
+) : Parcelable {
+    
+    fun toBinaryPayload(): ByteArray {
+        val buffer = ByteBuffer.allocate(8192).apply { order(ByteOrder.BIG_ENDIAN) }
+        
+        // Header
+        buffer.putLong(timestamp)
+        writeStringWithLength(buffer, batchId)
+        writeStringWithLength(buffer, deviceId)
+        buffer.putShort(records.size.toShort())
+        
+        // Records
+        records.forEach { record ->
+            val recordBytes = record.toBinaryPayload()
+            buffer.putShort(recordBytes.size.toShort())
+            buffer.put(recordBytes)
+        }
+        
+        return getUsedBytes(buffer)
+    }
+    
+    companion object {
+        fun fromBinaryPayload(data: ByteArray): TransferBatchMessage? {
+            return try {
+                val buffer = ByteBuffer.wrap(data).apply { order(ByteOrder.BIG_ENDIAN) }
+                
+                val timestamp = buffer.long
+                val batchId = readStringWithLength(buffer)
+                val deviceId = readStringWithLength(buffer)
+                val recordCount = buffer.short.toInt()
+                
+                val records = mutableListOf<TransferRecord>()
+                repeat(recordCount) {
+                    val recordSize = buffer.short.toInt()
+                    val recordBytes = ByteArray(recordSize)
+                    buffer.get(recordBytes)
+                    TransferRecord.fromBinaryPayload(recordBytes)?.let { record ->
+                        records.add(record)
+                    }
+                }
+                
+                TransferBatchMessage(batchId, deviceId, records, timestamp)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+}
+
 // Helper functions for binary serialization
 private fun writeStringWithLength(buffer: ByteBuffer, str: String) {
     val bytes = str.toByteArray(Charsets.UTF_8)
