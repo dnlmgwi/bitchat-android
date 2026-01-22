@@ -14,6 +14,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.*
 
 /**
+ * Interface for music analytics mesh synchronization
+ */
+interface MusicAnalyticsMeshSyncInterface {
+    suspend fun syncPlaybackRecords(records: List<PlaybackRecord>)
+    suspend fun syncTrackMetadata(metadata: List<TrackMetadata>)
+    suspend fun syncSharingRecords(records: List<SharingRecord>)
+    suspend fun syncTransferRecords(records: List<TransferRecord>)
+    fun startAggregatorDiscovery()
+    fun stopAggregatorDiscovery()
+    fun release()
+}
+
+/**
  * BLE mesh sync manager for music analytics
  * Handles device-to-device and device-to-aggregator synchronization
  * Adapts bitchat's mesh networking for playback data transmission
@@ -22,7 +35,7 @@ class MusicAnalyticsMeshSync(
     private val context: Context,
     private val meshService: BluetoothMeshService,
     private val deviceIdentificationService: DeviceIdentificationService
-) {
+) : MusicAnalyticsMeshSyncInterface {
     
     companion object {
         private const val TAG = "MusicAnalyticsMeshSync"
@@ -70,10 +83,24 @@ class MusicAnalyticsMeshSync(
         registerMessageHandlers()
     }
     
+    override fun startAggregatorDiscovery() {
+        startAggregatorDiscoveryInternal()
+    }
+    
+    override fun stopAggregatorDiscovery() {
+        discoveryJob?.cancel()
+        discoveryJob = null
+        Log.d(TAG, "Stopped aggregator discovery")
+    }
+    
+    override fun release() {
+        syncScope.cancel()
+    }
+    
     /**
      * Sync playback records to mesh network
      */
-    suspend fun syncPlaybackRecords(records: List<PlaybackRecord>) {
+    override suspend fun syncPlaybackRecords(records: List<PlaybackRecord>) {
         withContext(Dispatchers.IO) {
             try {
                 _syncStatus.value = SyncStatus.Discovering
@@ -105,7 +132,7 @@ class MusicAnalyticsMeshSync(
     /**
      * Sync track metadata to mesh network
      */
-    suspend fun syncTrackMetadata(metadata: List<TrackMetadata>) {
+    override suspend fun syncTrackMetadata(metadata: List<TrackMetadata>) {
         withContext(Dispatchers.IO) {
             try {
                 synchronized(pendingTrackMetadata) {
@@ -130,7 +157,7 @@ class MusicAnalyticsMeshSync(
     /**
      * Sync sharing records to mesh network
      */
-    suspend fun syncSharingRecords(records: List<SharingRecord>) {
+    override suspend fun syncSharingRecords(records: List<SharingRecord>) {
         withContext(Dispatchers.IO) {
             try {
                 // Send sharing records in batches
@@ -155,7 +182,7 @@ class MusicAnalyticsMeshSync(
     /**
      * Sync transfer records to mesh network
      */
-    suspend fun syncTransferRecords(records: List<TransferRecord>) {
+    override suspend fun syncTransferRecords(records: List<TransferRecord>) {
         withContext(Dispatchers.IO) {
             try {
                 // Add to pending queue for aggregator sync
@@ -230,7 +257,7 @@ class MusicAnalyticsMeshSync(
         }
     }
     
-    private fun startAggregatorDiscovery() {
+    private fun startAggregatorDiscoveryInternal() {
         discoveryJob?.cancel()
         discoveryJob = syncScope.launch {
             while (isActive) {
@@ -460,10 +487,6 @@ class MusicAnalyticsMeshSync(
     private fun getLastInternetSyncTime(): Long {
         // Return last successful internet sync timestamp (placeholder)
         return System.currentTimeMillis() - 3600000L // 1 hour ago
-    }
-    
-    fun release() {
-        syncScope.cancel()
     }
 }
 

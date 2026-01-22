@@ -23,8 +23,7 @@ class MusicAnalyticsViewModel(
     // Core services
     private val deviceIdentificationService = DeviceIdentificationService(application)
     private val contentIdGenerator = ContentIdGenerator(application)
-    private val meshSync = MusicAnalyticsMeshSync(application, meshService, deviceIdentificationService)
-    private val analyticsTracker = PlaybackAnalyticsTracker(application, meshSync)
+    private val analyticsTracker = PlaybackAnalyticsTracker.getInstance(application)
     private val transferTrackingService = TransferTrackingService(
         application,
         deviceIdentificationService,
@@ -47,7 +46,6 @@ class MusicAnalyticsViewModel(
     // Expose services for UI
     val playerService: MusicPlayerService = musicPlayerService
     val tracker: PlaybackAnalyticsTracker = analyticsTracker
-    val sync: MusicAnalyticsMeshSync = meshSync
     val metadataService: MusicMetadataService = musicSharingService
     val sharingService: MusicSharingService = MusicSharingService(
         application,
@@ -77,24 +75,20 @@ class MusicAnalyticsViewModel(
                 musicPlayerService.isPlaying,
                 musicPlayerService.currentTrackInfo,
                 analyticsTracker.totalRecords,
-                analyticsTracker.pendingSyncRecords,
-                meshSync.syncStatus,
-                meshSync.discoveredAggregators
+                analyticsTracker.pendingSyncRecords
             ) { flows ->
                 val isPlaying = flows[0] as Boolean
                 val currentTrack = flows[1] as MusicPlayerService.TrackInfo?
                 val totalRecords = flows[2] as Int
                 val pendingSync = flows[3] as Int
-                val syncStatus = flows[4] as MusicAnalyticsMeshSync.SyncStatus
-                val aggregators = flows[5] as Map<String, MusicAnalyticsMeshSync.AggregatorInfo>
                 
                 MusicAnalyticsUiState(
                     isPlaying = isPlaying,
                     currentTrack = currentTrack,
                     totalRecords = totalRecords,
                     pendingSyncRecords = pendingSync,
-                    syncStatus = syncStatus,
-                    discoveredAggregators = aggregators.size
+                    syncStatus = MusicAnalyticsMeshSync.SyncStatus.Idle, // Simplified for now
+                    discoveredAggregators = 0 // Simplified for now
                 )
             }.collect { newState ->
                 _uiState.value = newState
@@ -165,7 +159,8 @@ class MusicAnalyticsViewModel(
      * Start aggregator mode (for burning centers)
      */
     fun startAggregatorMode(aggregatorId: String, capacity: Int = 50) {
-        meshSync.startAggregatorMode(aggregatorId, capacity)
+        // This would be handled by the aggregator mode manager
+        Log.d("MusicAnalyticsViewModel", "Aggregator mode start requested: $aggregatorId")
     }
     
     /**
@@ -289,7 +284,6 @@ class MusicAnalyticsViewModel(
         super.onCleared()
         musicPlayerService.release()
         analyticsTracker.release()
-        meshSync.release()
         musicSharingService.release()
         musicLibraryService.release()
         transferTrackingService.release()

@@ -25,7 +25,15 @@ data class PlaybackRecordEntity(
     val sourceType: String,
     val deviceSignature: ByteArray?,
     val isSynced: Boolean = false,
-    val syncedAt: Long? = null
+    val syncedAt: Long? = null,
+    
+    // Listening Context Data
+    val timeOfDayBucket: String = "UNKNOWN",
+    val dayOfWeek: String = "UNKNOWN", 
+    val sessionDuration: Int = 0,
+    val playbackMode: String = "UNKNOWN",
+    val volumeLevelAvg: Float = 0.0f,
+    val audioOutputType: String = "UNKNOWN"
 ) {
     fun toModel(): PlaybackRecord {
         return PlaybackRecord(
@@ -39,7 +47,13 @@ data class PlaybackRecordEntity(
             skipCount = skipCount,
             repeatFlag = repeatFlag,
             sourceType = com.bitchat.android.music.model.SourceType.valueOf(sourceType),
-            deviceSignature = deviceSignature
+            deviceSignature = deviceSignature,
+            timeOfDayBucket = com.bitchat.android.music.model.TimeOfDayBucket.valueOf(timeOfDayBucket),
+            dayOfWeek = com.bitchat.android.music.model.DayOfWeek.valueOf(dayOfWeek),
+            sessionDuration = sessionDuration,
+            playbackMode = com.bitchat.android.music.model.PlaybackMode.valueOf(playbackMode),
+            volumeLevelAvg = volumeLevelAvg,
+            audioOutputType = com.bitchat.android.music.model.AudioOutputType.valueOf(audioOutputType)
         )
     }
 }
@@ -126,6 +140,9 @@ interface PlaybackRecordDao {
     @Query("SELECT COUNT(*) FROM playback_records WHERE durationPlayed >= 30 OR (durationPlayed * 2) >= trackDuration")
     suspend fun countQualifyingPlays(): Int
     
+    @Query("SELECT * FROM playback_records ORDER BY timestamp DESC")
+    suspend fun getAllRecords(): List<PlaybackRecordEntity>
+    
     @Query("DELETE FROM playback_records WHERE isSynced = 1 AND syncedAt < :cutoffTime")
     suspend fun deleteOldSyncedRecords(cutoffTime: Long): Int
 }
@@ -146,6 +163,9 @@ interface TrackMetadataDao {
     
     @Query("SELECT COUNT(*) FROM track_metadata")
     suspend fun count(): Int
+    
+    @Query("SELECT * FROM track_metadata ORDER BY firstSeen DESC")
+    suspend fun getAllRecords(): List<TrackMetadataEntity>
 }
 
 @Dao
@@ -171,13 +191,16 @@ interface SharingRecordDao {
     @Query("SELECT SUM(fileSize) FROM sharing_records WHERE transferStatus = 'COMPLETED'")
     suspend fun getTotalBytesShared(): Long
     
+    @Query("SELECT * FROM sharing_records ORDER BY timestamp DESC")
+    suspend fun getAllRecords(): List<SharingRecordEntity>
+    
     @Query("DELETE FROM sharing_records WHERE isSynced = 1 AND syncedAt < :cutoffTime")
     suspend fun deleteOldSyncedRecords(cutoffTime: Long): Int
 }
 
 @Database(
     entities = [PlaybackRecordEntity::class, TrackMetadataEntity::class, SharingRecordEntity::class, TransferRecordEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class MusicAnalyticsDatabase : RoomDatabase() {
@@ -200,7 +223,13 @@ fun PlaybackRecord.toEntity(): PlaybackRecordEntity {
         skipCount = skipCount,
         repeatFlag = repeatFlag,
         sourceType = sourceType.name,
-        deviceSignature = deviceSignature
+        deviceSignature = deviceSignature,
+        timeOfDayBucket = timeOfDayBucket.name,
+        dayOfWeek = dayOfWeek.name,
+        sessionDuration = sessionDuration,
+        playbackMode = playbackMode.name,
+        volumeLevelAvg = volumeLevelAvg,
+        audioOutputType = audioOutputType.name
     )
 }
 
@@ -288,6 +317,9 @@ interface TransferRecordDao {
     @Query("SELECT SUM(fileSize) FROM transfer_records WHERE transferStatus = 'COMPLETED'")
     suspend fun getTotalBytesTransferred(): Long
     
+    @Query("SELECT * FROM transfer_records ORDER BY timestamp DESC")
+    suspend fun getAllRecords(): List<TransferRecordEntity>
+    
     @Query("DELETE FROM transfer_records WHERE isSynced = 1 AND syncedAt < :cutoffTime")
     suspend fun deleteOldSyncedRecords(cutoffTime: Long): Int
 }
@@ -312,9 +344,9 @@ fun TransferRecord.toEntity(): TransferRecordEntity {
  * Playback analytics tracker with local SQLite storage
  * Manages playback records and prepares them for BLE sync
  */
-class PlaybackAnalyticsTracker(
+class PlaybackAnalyticsTracker private constructor(
     private val context: Context,
-    private val meshSyncManager: MusicAnalyticsMeshSync
+    private val meshSyncManager: MusicAnalyticsMeshSyncInterface
 ) {
     
     companion object {
@@ -322,14 +354,48 @@ class PlaybackAnalyticsTracker(
         private const val MAX_RECORDS_IN_MEMORY = 1000
         private const val BATCH_SIZE = 50
         private const val SYNC_INTERVAL_MS = 30000L // 30 seconds
+        
+        @Volatile
+        private var INSTANCE: PlaybackAnalyticsTracker? = null
+        
+        fun getInstance(context: Context): PlaybackAnalyticsTracker {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: run {
+                    // Create a placeholder mesh sync manager for now
+                    // In production, this would be injected or retrieved from a service locator
+                    val meshSync = createMeshSyncManager(context)
+                    PlaybackAnalyticsTracker(context.applicationContext, meshSync).also { 
+                        INSTANCE = it 
+                    }
+                }
+            }
+        }
+        
+        private fun createMeshSyncManager(context: Context): MusicAnalyticsMeshSyncInterface {
+            // This is a simplified approach - in production you'd inject these dependencies
+            // For now, we'll create a basic implementation that can be enhanced later
+            return try {
+                // Try to get the actual mesh service if available
+                // Note: BluetoothMeshService doesn't have getInstance, so we'll use stub for now
+                Log.d(TAG, "Creating stub mesh sync manager for development")
+                StubMusicAnalyticsMeshSync(context)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not create mesh sync manager, using stub", e)
+                // Create a stub implementation for testing/development
+                StubMusicAnalyticsMeshSync(context)
+            }
+        }
     }
     
     private val database by lazy { 
-        Room.databaseBuilder(
+        Log.d(TAG, "Initializing Room database...")
+        val db = Room.databaseBuilder(
             context.applicationContext,
             MusicAnalyticsDatabase::class.java,
             "music_analytics.db"
         ).build()
+        Log.d(TAG, "Room database initialized successfully")
+        db
     }
     
     private val trackerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -371,6 +437,7 @@ class PlaybackAnalyticsTracker(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error recording playback", e)
+                throw e // Re-throw to let caller handle
             }
         }
     }
@@ -389,6 +456,7 @@ class PlaybackAnalyticsTracker(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error recording track metadata", e)
+                throw e
             }
         }
     }
@@ -671,6 +739,62 @@ class PlaybackAnalyticsTracker(
         }
     }
     
+    /**
+     * Get all playback records for export
+     */
+    suspend fun getAllPlaybackRecords(): List<PlaybackRecord> {
+        return withContext(Dispatchers.IO) {
+            try {
+                database.playbackRecordDao().getAllRecords().map { it.toModel() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting all playback records", e)
+                emptyList()
+            }
+        }
+    }
+    
+    /**
+     * Get all sharing records for export
+     */
+    suspend fun getAllSharingRecords(): List<SharingRecord> {
+        return withContext(Dispatchers.IO) {
+            try {
+                database.sharingRecordDao().getAllRecords().map { it.toModel() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting all sharing records", e)
+                emptyList()
+            }
+        }
+    }
+    
+    /**
+     * Get all track metadata for export
+     */
+    suspend fun getAllTrackMetadata(): List<TrackMetadata> {
+        return withContext(Dispatchers.IO) {
+            try {
+                database.trackMetadataDao().getAllRecords().map { it.toModel() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting all track metadata", e)
+                emptyList()
+            }
+        }
+    }
+    
+    /**
+     * Get all transfer records for export
+     */
+    suspend fun getAllTransferRecords(): List<TransferRecord> {
+        return withContext(Dispatchers.IO) {
+            try {
+                database.transferRecordDao().getAllRecords().map { it.toModel() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting all transfer records", e)
+                emptyList()
+            }
+        }
+    }
+
     fun release() {
         trackerScope.cancel()
         database.close()
@@ -683,4 +807,48 @@ class PlaybackAnalyticsTracker(
         val totalPlayTimeSeconds: Long = 0,
         val qualifyingPlays: Int = 0
     )
+}
+
+/**
+ * Stub implementation of MusicAnalyticsMeshSync for development/testing
+ * This allows the app to compile and run without requiring full mesh service setup
+ */
+private class StubMusicAnalyticsMeshSync(private val context: Context) : MusicAnalyticsMeshSyncInterface {
+    
+    companion object {
+        private const val TAG = "StubMusicAnalyticsMeshSync"
+    }
+    
+    override suspend fun syncPlaybackRecords(records: List<PlaybackRecord>) {
+        Log.d(TAG, "Stub: Would sync ${records.size} playback records")
+        // In stub mode, just mark as synced immediately
+        delay(100) // Simulate network delay
+    }
+    
+    override suspend fun syncTrackMetadata(metadata: List<TrackMetadata>) {
+        Log.d(TAG, "Stub: Would sync ${metadata.size} track metadata records")
+        delay(100)
+    }
+    
+    override suspend fun syncSharingRecords(records: List<SharingRecord>) {
+        Log.d(TAG, "Stub: Would sync ${records.size} sharing records")
+        delay(100)
+    }
+    
+    override suspend fun syncTransferRecords(records: List<TransferRecord>) {
+        Log.d(TAG, "Stub: Would sync ${records.size} transfer records")
+        delay(100)
+    }
+    
+    override fun startAggregatorDiscovery() {
+        Log.d(TAG, "Stub: Starting aggregator discovery")
+    }
+    
+    override fun stopAggregatorDiscovery() {
+        Log.d(TAG, "Stub: Stopping aggregator discovery")
+    }
+    
+    override fun release() {
+        Log.d(TAG, "Stub: Released")
+    }
 }

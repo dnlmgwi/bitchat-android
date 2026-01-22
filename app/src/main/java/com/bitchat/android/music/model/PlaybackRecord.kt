@@ -8,7 +8,7 @@ import java.util.*
 
 /**
  * Playback record data model based on the Offline Music Analytics specification
- * Represents a single music playback event with verification data
+ * Represents a single music playback event with verification data and listening context
  */
 @Parcelize
 data class PlaybackRecord(
@@ -22,7 +22,15 @@ data class PlaybackRecord(
     val skipCount: Int = 0, // Number of times user skipped within track
     val repeatFlag: Boolean = false, // Was track played on repeat
     val sourceType: SourceType = SourceType.LOCAL_FILE,
-    val deviceSignature: ByteArray? = null // Ed25519 signature for verification
+    val deviceSignature: ByteArray? = null, // Ed25519 signature for verification
+    
+    // Listening Context Data for Business Intelligence
+    val timeOfDayBucket: TimeOfDayBucket = TimeOfDayBucket.UNKNOWN, // Morning/Afternoon/Evening/Night
+    val dayOfWeek: DayOfWeek = DayOfWeek.UNKNOWN, // Weekday vs weekend patterns
+    val sessionDuration: Int = 0, // How long user listened in one sitting (seconds)
+    val playbackMode: PlaybackMode = PlaybackMode.UNKNOWN, // Shuffle vs sequential vs repeat
+    val volumeLevelAvg: Float = 0.0f, // Average volume during playback (0.0-1.0)
+    val audioOutputType: AudioOutputType = AudioOutputType.UNKNOWN // Speaker vs headphones
 ) : Parcelable {
 
     /**
@@ -167,4 +175,71 @@ enum class SourceType(val value: UByte) {
             return values().find { it.value == value }
         }
     }
+}
+
+/**
+ * Time of day buckets for listening pattern analysis
+ * 4-hour windows prevent precise activity tracking while preserving patterns
+ */
+enum class TimeOfDayBucket(val displayName: String) {
+    MORNING("Morning (6AM-12PM)"),      // 06:00-11:59
+    AFTERNOON("Afternoon (12PM-6PM)"),  // 12:00-17:59
+    EVENING("Evening (6PM-12AM)"),      // 18:00-23:59
+    NIGHT("Night (12AM-6AM)"),          // 00:00-05:59
+    UNKNOWN("Unknown");
+    
+    companion object {
+        fun fromHour(hour: Int): TimeOfDayBucket {
+            return when (hour) {
+                in 6..11 -> MORNING
+                in 12..17 -> AFTERNOON
+                in 18..23 -> EVENING
+                in 0..5 -> NIGHT
+                else -> UNKNOWN
+            }
+        }
+    }
+}
+
+/**
+ * Day of week patterns for understanding work vs leisure listening
+ */
+enum class DayOfWeek(val displayName: String) {
+    WEEKDAY("Weekday"),
+    WEEKEND("Weekend"),
+    UNKNOWN("Unknown");
+    
+    companion object {
+        fun fromCalendarDay(dayOfWeek: Int): DayOfWeek {
+            return when (dayOfWeek) {
+                java.util.Calendar.SATURDAY, java.util.Calendar.SUNDAY -> WEEKEND
+                java.util.Calendar.MONDAY, java.util.Calendar.TUESDAY, 
+                java.util.Calendar.WEDNESDAY, java.util.Calendar.THURSDAY, 
+                java.util.Calendar.FRIDAY -> WEEKDAY
+                else -> UNKNOWN
+            }
+        }
+    }
+}
+
+/**
+ * Playback mode for understanding consumption patterns
+ */
+enum class PlaybackMode(val displayName: String) {
+    SEQUENTIAL("Sequential"),    // Playing tracks in order
+    SHUFFLE("Shuffle"),         // Random track order
+    REPEAT_ONE("Repeat One"),   // Repeating single track
+    REPEAT_ALL("Repeat All"),   // Repeating playlist/album
+    UNKNOWN("Unknown");
+}
+
+/**
+ * Audio output type for inferring listening context
+ */
+enum class AudioOutputType(val displayName: String) {
+    SPEAKER("Speaker"),         // Device speakers (social listening)
+    WIRED_HEADPHONES("Wired Headphones"),    // Wired headphones (personal)
+    BLUETOOTH_HEADPHONES("Bluetooth Headphones"), // Bluetooth headphones (personal)
+    BLUETOOTH_SPEAKER("Bluetooth Speaker"),  // External Bluetooth speaker (social)
+    UNKNOWN("Unknown");
 }

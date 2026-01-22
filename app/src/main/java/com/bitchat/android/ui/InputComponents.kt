@@ -68,7 +68,7 @@ class SlashCommandVisualTransformation : VisualTransformation {
                 // Add the styled slash command
                 withStyle(
                     style = SpanStyle(
-                        color = Color(0xFF00FF7F), // Bright green
+                        color = Color.White, // White
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         background = Color(0xFF2D2D2D) // Dark gray background
@@ -256,7 +256,7 @@ fun MessageInput(
         // Voice and image buttons when no text (only visible in Mesh chat)
         if (value.text.isEmpty() && showMediaButtons) {
             // Hold-to-record microphone
-            val bg = if (colorScheme.background == Color.Black) Color(0xFF00FF00).copy(alpha = 0.75f) else Color(0xFF008000).copy(alpha = 0.75f)
+            val bg = if (colorScheme.background == Color.Black) Color.White.copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.75f)
 
             // Ensure latest values are used when finishing recording
             val latestSelectedPeer = rememberUpdatedState(selectedPrivatePeer)
@@ -333,9 +333,9 @@ fun MessageInput(
                                 // Orange for both private messages and channels when enabled
                                 Color(0xFFFF9500).copy(alpha = 0.75f)
                             } else if (colorScheme.background == Color.Black) {
-                                Color(0xFF00FF00).copy(alpha = 0.75f) // Bright green for dark theme
+                                Color.White.copy(alpha = 0.75f) // White for dark theme
                             } else {
-                                Color(0xFF008000).copy(alpha = 0.75f) // Dark green for light theme
+                                Color.Black.copy(alpha = 0.75f) // Black for light theme
                             },
                             shape = CircleShape
                         ),
@@ -352,9 +352,9 @@ fun MessageInput(
                             // Black arrow on orange for both private and channel modes
                             Color.Black
                         } else if (colorScheme.background == Color.Black) {
-                            Color.Black // Black arrow on bright green in dark theme
+                            Color.Black // Black arrow on white in dark theme
                         } else {
-                            Color.White // White arrow on dark green in light theme
+                            Color.White // White arrow on black in light theme
                         }
                     )
                 }

@@ -23,6 +23,7 @@ import com.bitchat.android.service.AggregatorStats
 @Composable
 fun AggregatorModeSheet(
     onDismiss: () -> Unit,
+    onNavigateToFullScreen: () -> Unit = {}, // Add callback for navigation to full screen
     modifier: Modifier = Modifier
 ) {
     val aggregatorManager = remember { AggregatorModeManager.getInstance() }
@@ -164,6 +165,60 @@ fun AggregatorModeSheet(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 AggregatorStatusCard(stats = stats)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Export Data Card
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Data Export",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "Export collected analytics data in various formats for integration with external systems.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Button(
+                            onClick = { 
+                                // Navigate to full aggregator mode screen for export functionality
+                                onDismiss()
+                                onNavigateToFullScreen()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Open Export Options")
+                        }
+                    }
+                }
             }
         }
     }

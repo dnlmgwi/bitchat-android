@@ -3,7 +3,16 @@
     <cache-path
         name="cache"
         path="." />
+    <cache-path
+        name="cache_exports"
+        path="exports" />
     <files-path
         name="files"
         path="." />
+    <external-files-path
+        name="external_files"
+        path="." />
+    <external-files-path
+        name="exports"
+        path="exports" />
 </paths>

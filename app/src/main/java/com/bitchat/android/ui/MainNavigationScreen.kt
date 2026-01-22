@@ -26,6 +26,7 @@ import com.bitchat.android.music.ui.MusicSharingScreen
 import com.bitchat.android.music.ui.MediaPlayerWidget
 import com.bitchat.android.music.ui.MusicLibraryMainScreen
 import com.bitchat.android.music.ui.FileTransferScreen
+import com.bitchat.android.music.ui.AggregatorModeScreen
 
 /**
  * Main navigation screen that includes both chat and music analytics
@@ -43,6 +44,7 @@ fun MainNavigationScreen(
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var showMusicLibrary by remember { mutableStateOf(false) }
     var showAggregatorModeSheet by remember { mutableStateOf(false) }
+    var showFullAggregatorScreen by remember { mutableStateOf(false) }
     
     // Create music analytics ViewModel
     val musicAnalyticsViewModel: MusicAnalyticsViewModel = viewModel(
@@ -54,14 +56,14 @@ fun MainNavigationScreen(
     
     // Observe music playing state for widget visibility
     val musicUiState by musicAnalyticsViewModel.uiState.collectAsStateWithLifecycle()
-    val isPlayerVisible = !showMusicLibrary && (musicUiState.isPlaying || musicUiState.currentTrack != null)
+    val isPlayerVisible = !showMusicLibrary && !showFullAggregatorScreen && (musicUiState.isPlaying || musicUiState.currentTrack != null)
     
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
-                // Only show bottom nav when player is not expanded and library is not open
+                // Only show bottom nav when player is not expanded and library is not open and aggregator screen is not open
                 AnimatedVisibility(
-                    visible = !isPlayerExpanded && !showMusicLibrary,
+                    visible = !isPlayerExpanded && !showMusicLibrary && !showFullAggregatorScreen,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
@@ -106,6 +108,11 @@ fun MainNavigationScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         when {
+                            showFullAggregatorScreen -> {
+                                AggregatorModeScreen(
+                                    onBack = { showFullAggregatorScreen = false }
+                                )
+                            }
                             showMusicLibrary -> {
                                 MusicLibraryMainScreen(
                                     libraryService = musicAnalyticsViewModel.libraryService,
@@ -129,7 +136,8 @@ fun MainNavigationScreen(
                                         }
                                         showMusicLibrary = false
                                     },
-                                    onBack = { showMusicLibrary = false }
+                                    onBack = { showMusicLibrary = false },
+                                    isPlayerVisible = isPlayerVisible
                                 )
                             }
                             else -> {
@@ -159,7 +167,8 @@ fun MainNavigationScreen(
                                                     }
                                                 }
                                             },
-                                            onBack = null // No back action for main tab
+                                            onBack = null, // No back action for main tab
+                                            isPlayerVisible = isPlayerVisible
                                         )
                                     }
                                     NavigationTab.TRANSFERS -> {
@@ -219,7 +228,8 @@ fun MainNavigationScreen(
     // Aggregator Mode Sheet
     if (showAggregatorModeSheet) {
         AggregatorModeSheet(
-            onDismiss = { showAggregatorModeSheet = false }
+            onDismiss = { showAggregatorModeSheet = false },
+            onNavigateToFullScreen = { showFullAggregatorScreen = true }
         )
     }
 }

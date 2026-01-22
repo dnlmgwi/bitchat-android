@@ -68,7 +68,7 @@ fun AggregatorModeIndicator(
                             .clip(RoundedCornerShape(4.dp))
                             .background(
                                 when (syncStatus) {
-                                    "Active - Restored", "Syncing", "Active" -> androidx.compose.ui.graphics.Color.Green
+                                    "Active - Restored", "Syncing", "Active" -> androidx.compose.ui.graphics.Color.White
                                     "Starting..." -> androidx.compose.ui.graphics.Color(0xFFFFA500) // Orange
                                     "Stopped" -> androidx.compose.ui.graphics.Color.Red
                                     else -> androidx.compose.ui.graphics.Color.Gray
@@ -162,7 +162,7 @@ fun CompactAggregatorModeIndicator(
                         .clip(RoundedCornerShape(3.dp))
                         .background(
                             when (syncStatus) {
-                                "Active - Restored", "Syncing", "Active" -> androidx.compose.ui.graphics.Color.Green
+                                "Active - Restored", "Syncing", "Active" -> androidx.compose.ui.graphics.Color.White
                                 "Starting..." -> androidx.compose.ui.graphics.Color(0xFFFFA500) // Orange
                                 else -> androidx.compose.ui.graphics.Color.Gray
                             }

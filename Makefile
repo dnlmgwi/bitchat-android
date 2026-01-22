@@ -61,7 +61,7 @@ install-release: build-release
 
 uninstall:
 	@echo "Uninstalling app..."
-	adb uninstall com.bitchat.droid || echo "App not installed"
+	adb uninstall mw.newwave.mabench || echo "App not installed"
 
 # Testing
 test:
@@ -78,12 +78,12 @@ lint:
 
 # Device Management
 run:
-	@echo "Launching Bitchat..."
-	adb shell am start -n com.bitchat.droid/com.bitchat.android.MainActivity
+	@echo "Launching mabench..."
+	adb shell am start -n mw.newwave.mabench/com.bitchat.android.MainActivity
 
 stop:
-	@echo "Stopping Bitchat..."
-	adb shell am force-stop com.bitchat.droid
+	@echo "Stopping mabench..."
+	adb shell am force-stop mw.newwave.mabench
 
 logs:
 	@echo "Showing app logs (Ctrl+C to stop)..."
@@ -99,14 +99,14 @@ device-info:
 
 permissions:
 	@echo "Granting required permissions..."
-	adb shell pm grant com.bitchat.droid android.permission.ACCESS_FINE_LOCATION
-	adb shell pm grant com.bitchat.droid android.permission.ACCESS_COARSE_LOCATION
-	adb shell pm grant com.bitchat.droid android.permission.BLUETOOTH_SCAN
-	adb shell pm grant com.bitchat.droid android.permission.BLUETOOTH_CONNECT
-	adb shell pm grant com.bitchat.droid android.permission.BLUETOOTH_ADVERTISE
-	adb shell pm grant com.bitchat.droid android.permission.POST_NOTIFICATIONS
-	adb shell pm grant com.bitchat.droid android.permission.RECORD_AUDIO
-	adb shell pm grant com.bitchat.droid android.permission.READ_MEDIA_AUDIO
+	adb shell pm grant mw.newwave.mabench android.permission.ACCESS_FINE_LOCATION
+	adb shell pm grant mw.newwave.mabench android.permission.ACCESS_COARSE_LOCATION
+	adb shell pm grant mw.newwave.mabench android.permission.BLUETOOTH_SCAN
+	adb shell pm grant mw.newwave.mabench android.permission.BLUETOOTH_CONNECT
+	adb shell pm grant mw.newwave.mabench android.permission.BLUETOOTH_ADVERTISE
+	adb shell pm grant mw.newwave.mabench android.permission.POST_NOTIFICATIONS
+	adb shell pm grant mw.newwave.mabench android.permission.RECORD_AUDIO
+	adb shell pm grant mw.newwave.mabench android.permission.READ_MEDIA_AUDIO
 	@echo "Permissions granted!"
 
 # Development Workflow Shortcuts
@@ -150,14 +150,14 @@ release-check: lint test
 # Debugging
 debug-info:
 	@echo "Debug information:"
-	@echo "Package: com.bitchat.droid"
+	@echo "Package: mw.newwave.mabench"
 	@echo "Main Activity: com.bitchat.android.MainActivity"
 	@echo ""
 	@echo "App status:"
-	@adb shell ps | grep bitchat || echo "App not running"
+	@adb shell ps | grep mabench || echo "App not running"
 	@echo ""
 	@echo "Recent crashes:"
-	@adb shell dumpsys dropbox --print | grep bitchat | tail -5 || echo "No recent crashes"
+	@adb shell dumpsys dropbox --print | grep mabench | tail -5 || echo "No recent crashes"
 
 # Network & Mesh Debugging
 mesh-debug:
@@ -172,10 +172,10 @@ transfer-debug:
 # Performance Monitoring
 perf:
 	@echo "Performance monitoring..."
-	adb shell top -n 1 | grep bitchat || echo "App not running"
+	adb shell top -n 1 | grep mabench || echo "App not running"
 	@echo ""
 	@echo "Memory usage:"
-	@adb shell dumpsys meminfo com.bitchat.droid | head -20 || echo "App not running"
+	@adb shell dumpsys meminfo mw.newwave.mabench | head -20 || echo "App not running"
 
 # Backup & Restore (for development)
 backup-prefs:

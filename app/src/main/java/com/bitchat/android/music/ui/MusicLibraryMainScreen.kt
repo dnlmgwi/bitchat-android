@@ -28,6 +28,7 @@ fun MusicLibraryMainScreen(
     libraryService: MusicLibraryService,
     onTrackSelected: (MusicLibraryService.AudioTrack) -> Unit,
     onBack: (() -> Unit)? = null, // Optional back action for when used as overlay
+    isPlayerVisible: Boolean = false, // Add parameter to know if media widget is visible
     modifier: Modifier = Modifier
 ) {
     val isScanning by libraryService.isScanning.collectAsStateWithLifecycle()
@@ -175,20 +176,23 @@ fun MusicLibraryMainScreen(
                     LibraryViewMode.TRACKS -> {
                         LibraryTracksList(
                             tracks = displayedTracks,
-                            onTrackSelected = onTrackSelected
+                            onTrackSelected = onTrackSelected,
+                            isPlayerVisible = isPlayerVisible
                         )
                     }
                     LibraryViewMode.FOLDERS -> {
                         LibraryFoldersList(
                             folders = folders.filter { !it.isExcluded },
                             libraryService = libraryService,
-                            onTrackSelected = onTrackSelected
+                            onTrackSelected = onTrackSelected,
+                            isPlayerVisible = isPlayerVisible
                         )
                     }
                     LibraryViewMode.ARTISTS -> {
                         LibraryArtistsList(
                             tracks = displayedTracks,
-                            onTrackSelected = onTrackSelected
+                            onTrackSelected = onTrackSelected,
+                            isPlayerVisible = isPlayerVisible
                         )
                     }
                 }
@@ -272,10 +276,16 @@ private fun LibraryEmptyContent(
 @Composable
 private fun LibraryTracksList(
     tracks: List<MusicLibraryService.AudioTrack>,
-    onTrackSelected: (MusicLibraryService.AudioTrack) -> Unit
+    onTrackSelected: (MusicLibraryService.AudioTrack) -> Unit,
+    isPlayerVisible: Boolean = false
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 8.dp,
+            bottom = if (isPlayerVisible) 88.dp else 8.dp // Extra bottom padding when player is visible
+        ),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(tracks) { track ->
@@ -291,10 +301,16 @@ private fun LibraryTracksList(
 private fun LibraryFoldersList(
     folders: List<MusicLibraryService.MusicFolder>,
     libraryService: MusicLibraryService,
-    onTrackSelected: (MusicLibraryService.AudioTrack) -> Unit
+    onTrackSelected: (MusicLibraryService.AudioTrack) -> Unit,
+    isPlayerVisible: Boolean = false
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 8.dp,
+            bottom = if (isPlayerVisible) 88.dp else 8.dp // Extra bottom padding when player is visible
+        ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(folders) { folder ->
@@ -310,14 +326,20 @@ private fun LibraryFoldersList(
 @Composable
 private fun LibraryArtistsList(
     tracks: List<MusicLibraryService.AudioTrack>,
-    onTrackSelected: (MusicLibraryService.AudioTrack) -> Unit
+    onTrackSelected: (MusicLibraryService.AudioTrack) -> Unit,
+    isPlayerVisible: Boolean = false
 ) {
     val artistGroups = remember(tracks) {
         tracks.groupBy { it.artist }.toList().sortedBy { it.first }
     }
     
     LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 8.dp,
+            bottom = if (isPlayerVisible) 88.dp else 8.dp // Extra bottom padding when player is visible
+        ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(artistGroups) { (artist, artistTracks) ->
