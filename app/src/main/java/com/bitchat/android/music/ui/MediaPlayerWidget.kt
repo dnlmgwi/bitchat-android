@@ -1,5 +1,6 @@
 package com.bitchat.android.music.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,6 +43,11 @@ fun MediaPlayerWidget(
     val currentTrack by musicPlayerService.currentTrackInfo.collectAsStateWithLifecycle()
     val repeatMode by musicPlayerService.repeatMode.collectAsStateWithLifecycle()
     val isShuffleMode by musicPlayerService.isShuffleMode.collectAsStateWithLifecycle()
+
+    // Handle back button when player is expanded to minimize it
+    BackHandler(enabled = isExpanded) {
+        onExpandedChange(false)
+    }
 
     AnimatedVisibility(
         visible = currentTrack != null,

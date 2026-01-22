@@ -151,6 +151,9 @@ dependencies {
     // EXIF orientation handling for images
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     
+    // DocumentFile for USB file operations
+    implementation("androidx.documentfile:documentfile:1.0.1")
+    
     // Testing
     testImplementation(libs.bundles.testing)
     androidTestImplementation(platform(libs.androidx.compose.bom))

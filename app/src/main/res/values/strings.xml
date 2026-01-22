@@ -183,6 +183,27 @@
   <string name="cd_end_to_end_encryption">End-to-End Encryption</string>
   <string name="location_bluetooth_subtitle">#bluetooth • %1$s</string>
 
+  <!-- USB Transfer Strings -->
+  <string name="usb_transfer_title">USB File Transfer</string>
+  <string name="usb_device_detected">USB device detected</string>
+  <string name="usb_device_permission_required">USB device permission required</string>
+  <string name="usb_no_devices">No USB storage devices detected</string>
+  <string name="usb_select_files">Select files to transfer</string>
+  <string name="usb_select_destination">Select USB destination folder</string>
+  <string name="usb_transfer_progress">Transfer progress</string>
+  <string name="usb_transfer_complete">Transfer complete</string>
+  <string name="usb_transfer_failed">Transfer failed</string>
+  <string name="usb_transfer_cancelled">Transfer cancelled</string>
+  <string name="usb_connect_device">Connect USB flash drive</string>
+  <string name="usb_grant_permission">Grant USB permission</string>
+  <string name="usb_refresh_devices">Refresh devices</string>
+  <string name="usb_transfer_files">Transfer Files</string>
+  <string name="usb_transfer_history">Transfer History</string>
+  <string name="cd_usb_device">USB device</string>
+  <string name="cd_refresh_usb">Refresh USB devices</string>
+  <string name="cd_select_usb_folder">Select USB folder</string>
+  <string name="cd_cancel_transfer">Cancel transfer</string>
+
   <string name="image_page_of">Image %1$d of %2$d</string>
   <string name="image_unavailable">Image unavailable</string>
   <string name="image_saved_to_downloads">Image saved to Downloads</string>

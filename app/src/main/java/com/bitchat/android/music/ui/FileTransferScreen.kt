@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bitchat.android.music.model.TransferMethod
 import com.bitchat.android.music.MusicLibraryService
+import com.bitchat.android.ui.usb.UsbTransferScreen
 
 /**
  * File transfer screen for selecting and sharing music files via various methods
@@ -47,13 +48,19 @@ fun FileTransferScreen(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Transfer Files") },
+                text = { Text("Music Library") },
                 icon = { Icon(Icons.Default.Share, contentDescription = null) }
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Transfer History") },
+                text = { Text("USB Transfer") },
+                icon = { Icon(Icons.Default.Usb, contentDescription = null) }
+            )
+            Tab(
+                selected = selectedTab == 2,
+                onClick = { selectedTab = 2 },
+                text = { Text("History") },
                 icon = { Icon(Icons.Default.History, contentDescription = null) }
             )
         }
@@ -69,7 +76,18 @@ fun FileTransferScreen(
                 onRefreshLibrary = { viewModel.libraryService.scanLibrary() },
                 modifier = Modifier.weight(1f)
             )
-            1 -> TransferTrackingScreen(
+            1 -> UsbTransferScreen(
+                selectedFiles = selectedTracks.map { track ->
+                    java.io.File(track.path)
+                },
+                onFilesSelected = { files ->
+                    // Convert files back to tracks for consistency
+                    // This is a simplified approach - in a real implementation,
+                    // you might want to maintain separate state for USB transfers
+                },
+                modifier = Modifier.weight(1f)
+            )
+            2 -> TransferTrackingScreen(
                 viewModel = viewModel,
                 modifier = Modifier.weight(1f)
             )

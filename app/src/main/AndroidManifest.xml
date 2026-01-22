@@ -48,6 +48,9 @@
     <!-- Haptic feedback permission -->
     <uses-permission android:name="android.permission.VIBRATE" />
     
+    <!-- USB Host support for USB flash drives -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    
     <!-- Battery optimization permission -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     
