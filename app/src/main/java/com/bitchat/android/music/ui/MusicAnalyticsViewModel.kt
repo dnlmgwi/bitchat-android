@@ -10,6 +10,7 @@ import com.bitchat.android.music.*
 import com.bitchat.android.music.model.SourceType
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
  * ViewModel for music analytics integration
@@ -30,12 +31,11 @@ class MusicAnalyticsViewModel(
         contentIdGenerator,
         analyticsTracker
     )
-    private val musicPlayerService = MusicPlayerService(
-        application, 
-        deviceIdentificationService, 
-        contentIdGenerator, 
-        analyticsTracker
-    )
+    
+    // Music player service will be obtained from foreground service
+    private var musicPlayerService: MusicPlayerService? = null
+    private var musicForegroundService: MusicForegroundService? = null
+    
     private val musicSharingService = MusicMetadataService(
         application,
         deviceIdentificationService,
@@ -43,8 +43,8 @@ class MusicAnalyticsViewModel(
     )
     private val musicLibraryService = MusicLibraryService(application)
     
-    // Expose services for UI
-    val playerService: MusicPlayerService = musicPlayerService
+    // Expose services for UI (will be initialized when foreground service connects)
+    val playerService: MusicPlayerService? get() = musicPlayerService
     val tracker: PlaybackAnalyticsTracker = analyticsTracker
     val metadataService: MusicMetadataService = musicSharingService
     val sharingService: MusicSharingService = MusicSharingService(
@@ -66,14 +66,22 @@ class MusicAnalyticsViewModel(
     val analyticsStats: StateFlow<PlaybackAnalyticsTracker.AnalyticsStats> = _analyticsStats.asStateFlow()
     
     init {
-        // Initialize music notification manager
-        (application as? BitchatApplication)?.initializeMusicNotificationManager(musicPlayerService)
+        // Start the music foreground service and bind to it
+        startMusicForegroundService()
+        
+        // Initialize music notification manager when player service is available
+        initializeNotificationManager()
         
         // Combine various state flows for UI
         viewModelScope.launch {
+            // Wait for music player service to be available
+            while (musicPlayerService == null) {
+                delay(100)
+            }
+            
             combine(
-                musicPlayerService.isPlaying,
-                musicPlayerService.currentTrackInfo,
+                musicPlayerService!!.isPlaying,
+                musicPlayerService!!.currentTrackInfo,
                 analyticsTracker.totalRecords,
                 analyticsTracker.pendingSyncRecords
             ) { flows ->
@@ -105,13 +113,77 @@ class MusicAnalyticsViewModel(
     }
     
     /**
+     * Start the music foreground service
+     */
+    private fun startMusicForegroundService() {
+        val intent = android.content.Intent(getApplication(), MusicForegroundService::class.java)
+        intent.action = MusicForegroundService.ACTION_START_PLAYBACK
+        getApplication<Application>().startService(intent)
+        
+        // Bind to the service to get access to the music player
+        bindToMusicForegroundService()
+    }
+    
+    /**
+     * Bind to the music foreground service to get the player instance
+     */
+    private fun bindToMusicForegroundService() {
+        val intent = android.content.Intent(getApplication(), MusicForegroundService::class.java)
+        val connection = object : android.content.ServiceConnection {
+            override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {
+                val binder = service as? MusicForegroundService.MusicServiceBinder
+                musicForegroundService = binder?.getService()
+                musicPlayerService = musicForegroundService?.getMusicPlayerService()
+                
+                Log.d("MusicAnalyticsViewModel", "Connected to music foreground service")
+                
+                // Initialize notification manager now that we have the player service
+                musicPlayerService?.let { player ->
+                    (getApplication() as? BitchatApplication)?.initializeMusicNotificationManager(player)
+                }
+            }
+            
+            override fun onServiceDisconnected(name: android.content.ComponentName?) {
+                musicForegroundService = null
+                musicPlayerService = null
+                Log.d("MusicAnalyticsViewModel", "Disconnected from music foreground service")
+            }
+        }
+        
+        getApplication<Application>().bindService(intent, connection, android.content.Context.BIND_AUTO_CREATE)
+    }
+    
+    /**
+     * Initialize notification manager when player service is available
+     */
+    private fun initializeNotificationManager() {
+        viewModelScope.launch {
+            // Wait for music player service to be available
+            while (musicPlayerService == null) {
+                delay(100)
+            }
+            
+            musicPlayerService?.let { player ->
+                (getApplication() as? BitchatApplication)?.initializeMusicNotificationManager(player)
+            }
+        }
+    }
+    
+    /**
      * Load and play a music file
      */
     fun loadAndPlayTrack(filePath: String, sourceType: SourceType = SourceType.LOCAL_FILE) {
         viewModelScope.launch {
-            val success = musicPlayerService.loadTrack(filePath, sourceType)
-            if (success) {
-                musicPlayerService.play()
+            // Ensure foreground service is started for background playback
+            val intent = android.content.Intent(getApplication(), MusicForegroundService::class.java)
+            intent.action = MusicForegroundService.ACTION_START_PLAYBACK
+            getApplication<Application>().startService(intent)
+            
+            musicPlayerService?.let { player ->
+                val success = player.loadTrack(filePath, sourceType)
+                if (success) {
+                    player.play()
+                }
             }
         }
     }
@@ -120,10 +192,19 @@ class MusicAnalyticsViewModel(
      * Play/pause current track
      */
     fun togglePlayPause() {
-        if (musicPlayerService.isPlaying.value) {
-            musicPlayerService.pause()
-        } else {
-            musicPlayerService.play()
+        musicPlayerService?.let { player ->
+            if (player.isPlaying.value) {
+                // Send pause action to foreground service
+                val intent = android.content.Intent(getApplication(), MusicForegroundService::class.java)
+                intent.action = MusicForegroundService.ACTION_PAUSE_PLAYBACK
+                getApplication<Application>().startService(intent)
+            } else {
+                // Send play action to foreground service
+                val intent = android.content.Intent(getApplication(), MusicForegroundService::class.java)
+                intent.action = MusicForegroundService.ACTION_START_PLAYBACK
+                getApplication<Application>().startService(intent)
+                player.play()
+            }
         }
     }
     
@@ -131,21 +212,26 @@ class MusicAnalyticsViewModel(
      * Stop playback
      */
     fun stopPlayback() {
-        musicPlayerService.stop()
+        musicPlayerService?.stop()
+        
+        // Stop the foreground service when playback stops
+        val intent = android.content.Intent(getApplication(), MusicForegroundService::class.java)
+        intent.action = MusicForegroundService.ACTION_STOP_PLAYBACK
+        getApplication<Application>().startService(intent)
     }
     
     /**
      * Seek to position
      */
     fun seekTo(positionSeconds: Int) {
-        musicPlayerService.seekTo(positionSeconds)
+        musicPlayerService?.seekTo(positionSeconds)
     }
     
     /**
      * Toggle repeat mode (cycles through OFF -> ONE -> ALL -> OFF)
      */
     fun toggleRepeatMode() {
-        musicPlayerService.toggleRepeat()
+        musicPlayerService?.toggleRepeat()
     }
     
     /**
@@ -282,7 +368,13 @@ class MusicAnalyticsViewModel(
     
     override fun onCleared() {
         super.onCleared()
-        musicPlayerService.release()
+        
+        // Stop the music foreground service
+        val intent = android.content.Intent(getApplication(), MusicForegroundService::class.java)
+        intent.action = MusicForegroundService.ACTION_STOP_PLAYBACK
+        getApplication<Application>().startService(intent)
+        
+        // Clean up other services
         analyticsTracker.release()
         musicSharingService.release()
         musicLibraryService.release()

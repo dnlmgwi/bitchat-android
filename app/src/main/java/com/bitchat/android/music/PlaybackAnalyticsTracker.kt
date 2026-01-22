@@ -387,13 +387,32 @@ class PlaybackAnalyticsTracker private constructor(
         }
     }
     
+    // Database migration from version 3 to 4 (added listening context fields)
+    private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+        override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+            Log.d(TAG, "Migrating database from version 3 to 4")
+            
+            // Add new columns to playback_records table
+            database.execSQL("ALTER TABLE playback_records ADD COLUMN timeOfDayBucket TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            database.execSQL("ALTER TABLE playback_records ADD COLUMN dayOfWeek TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            database.execSQL("ALTER TABLE playback_records ADD COLUMN sessionDuration INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE playback_records ADD COLUMN playbackMode TEXT NOT NULL DEFAULT 'SEQUENTIAL'")
+            database.execSQL("ALTER TABLE playback_records ADD COLUMN volumeLevelAvg REAL NOT NULL DEFAULT 0.5")
+            database.execSQL("ALTER TABLE playback_records ADD COLUMN audioOutputType TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            
+            Log.d(TAG, "Database migration from version 3 to 4 completed successfully")
+        }
+    }
+
     private val database by lazy { 
         Log.d(TAG, "Initializing Room database...")
         val db = Room.databaseBuilder(
             context.applicationContext,
             MusicAnalyticsDatabase::class.java,
             "music_analytics.db"
-        ).build()
+        )
+        .addMigrations(MIGRATION_3_4)
+        .build()
         Log.d(TAG, "Room database initialized successfully")
         db
     }

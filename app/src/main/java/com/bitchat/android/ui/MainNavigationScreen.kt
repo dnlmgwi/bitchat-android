@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
@@ -57,6 +58,11 @@ fun MainNavigationScreen(
     // Observe music playing state for widget visibility
     val musicUiState by musicAnalyticsViewModel.uiState.collectAsStateWithLifecycle()
     val isPlayerVisible = !showMusicLibrary && !showFullAggregatorScreen && (musicUiState.isPlaying || musicUiState.currentTrack != null)
+    
+    // Handle back press when in aggregator mode
+    BackHandler(enabled = showFullAggregatorScreen) {
+        showFullAggregatorScreen = false
+    }
     
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
@@ -123,14 +129,16 @@ fun MainNavigationScreen(
                                             val trackPaths = allTracks.map { it.path }
                                             val selectedIndex = allTracks.indexOfFirst { it.path == track.path }
                                             
-                                            if (selectedIndex >= 0) {
-                                                musicAnalyticsViewModel.playerService.setPlaylist(trackPaths, selectedIndex)
-                                                musicAnalyticsViewModel.playerService.play()
-                                            } else {
-                                                // Fallback to single track
-                                                val success = musicAnalyticsViewModel.playerService.loadTrack(track.path)
-                                                if (success) {
-                                                    musicAnalyticsViewModel.playerService.play()
+                                            musicAnalyticsViewModel.playerService?.let { player ->
+                                                if (selectedIndex >= 0) {
+                                                    player.setPlaylist(trackPaths, selectedIndex)
+                                                    player.play()
+                                                } else {
+                                                    // Fallback to single track
+                                                    val success = player.loadTrack(track.path)
+                                                    if (success) {
+                                                        player.play()
+                                                    }
                                                 }
                                             }
                                         }
@@ -143,7 +151,10 @@ fun MainNavigationScreen(
                             else -> {
                                 when (selectedTab) {
                                     NavigationTab.CHAT -> {
-                                        ChatScreen(viewModel = chatViewModel)
+                                        ChatScreen(
+                                            viewModel = chatViewModel,
+                                            isPlayerVisible = isPlayerVisible
+                                        )
                                     }
                                     NavigationTab.MUSIC -> {
                                         MusicLibraryMainScreen(
@@ -155,14 +166,16 @@ fun MainNavigationScreen(
                                                     val trackPaths = allTracks.map { it.path }
                                                     val selectedIndex = allTracks.indexOfFirst { it.path == track.path }
                                                     
-                                                    if (selectedIndex >= 0) {
-                                                        musicAnalyticsViewModel.playerService.setPlaylist(trackPaths, selectedIndex)
-                                                        musicAnalyticsViewModel.playerService.play()
-                                                    } else {
-                                                        // Fallback to single track
-                                                        val success = musicAnalyticsViewModel.playerService.loadTrack(track.path)
-                                                        if (success) {
-                                                            musicAnalyticsViewModel.playerService.play()
+                                                    musicAnalyticsViewModel.playerService?.let { player ->
+                                                        if (selectedIndex >= 0) {
+                                                            player.setPlaylist(trackPaths, selectedIndex)
+                                                            player.play()
+                                                        } else {
+                                                            // Fallback to single track
+                                                            val success = player.loadTrack(track.path)
+                                                            if (success) {
+                                                                player.play()
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -190,24 +203,25 @@ fun MainNavigationScreen(
                 }
                 
                 // Media player widget overlay
-                AnimatedVisibility(
-                    visible = isPlayerVisible,
-                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-                    modifier = Modifier.align(
-                        if (isPlayerExpanded) Alignment.Center else Alignment.BottomCenter
-                    )
-                ) {
-                    MediaPlayerWidget(
-                        musicPlayerService = musicAnalyticsViewModel.playerService,
-                        isExpanded = isPlayerExpanded,
-                        onExpandedChange = { isPlayerExpanded = it },
-                        onOpenLibrary = { 
-                            // Navigate to Music tab and collapse player
-                            selectedTab = NavigationTab.MUSIC
-                            isPlayerExpanded = false
-                        },
-                        modifier = Modifier
+                musicAnalyticsViewModel.playerService?.let { playerService ->
+                    AnimatedVisibility(
+                        visible = isPlayerVisible,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                        modifier = Modifier.align(
+                            if (isPlayerExpanded) Alignment.Center else Alignment.BottomCenter
+                        )
+                    ) {
+                        MediaPlayerWidget(
+                            musicPlayerService = playerService,
+                            isExpanded = isPlayerExpanded,
+                            onExpandedChange = { isPlayerExpanded = it },
+                            onOpenLibrary = { 
+                                // Navigate to Music tab and collapse player
+                                selectedTab = NavigationTab.MUSIC
+                                isPlayerExpanded = false
+                            },
+                            modifier = Modifier
                             .fillMaxWidth()
                             .then(
                                 if (isPlayerExpanded) {
@@ -221,6 +235,7 @@ fun MainNavigationScreen(
                             )
                     )
                 }
+            }
             }
         }
     }

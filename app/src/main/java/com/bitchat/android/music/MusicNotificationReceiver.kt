@@ -7,7 +7,7 @@ import android.util.Log
 
 /**
  * Broadcast receiver for handling media notification actions
- * Routes notification button presses to the music notification manager
+ * Routes notification button presses to the music notification manager via the application
  */
 class MusicNotificationReceiver : BroadcastReceiver() {
     
@@ -20,9 +20,15 @@ class MusicNotificationReceiver : BroadcastReceiver() {
         Log.d(TAG, "Received notification action: $action")
         
         if (action != null) {
-            // Get the notification manager instance from the application
+            // Route the action through the application's notification manager
             val application = context.applicationContext as? com.bitchat.android.BitchatApplication
-            application?.getMusicNotificationManager()?.handleNotificationAction(action)
+            val notificationManager = application?.getMusicNotificationManager()
+            
+            if (notificationManager != null) {
+                notificationManager.handleNotificationAction(action)
+            } else {
+                Log.w(TAG, "Music notification manager not available, action ignored: $action")
+            }
         }
     }
 }

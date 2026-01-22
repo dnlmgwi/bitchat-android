@@ -1,8 +1,12 @@
 package com.bitchat.android.music
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import com.bitchat.android.music.model.PlaybackRecord
 import com.bitchat.android.music.model.SourceType
@@ -16,6 +20,7 @@ import java.io.File
 /**
  * Music player service with integrated playback analytics tracking
  * Tracks detailed listening behavior for royalty calculations
+ * Includes proper audio focus management for background playback
  */
 class MusicPlayerService(
     private val context: Context,
@@ -32,6 +37,45 @@ class MusicPlayerService(
     private var mediaPlayer: MediaPlayer? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var progressUpdateJob: Job? = null
+    
+    // Audio focus management
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasAudioFocus = false
+    private var wasPlayingBeforeFocusLoss = false
+    
+    // Audio focus listener
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                Log.d(TAG, "Audio focus gained")
+                hasAudioFocus = true
+                if (wasPlayingBeforeFocusLoss) {
+                    play()
+                    wasPlayingBeforeFocusLoss = false
+                }
+                // Restore full volume
+                mediaPlayer?.setVolume(1.0f, 1.0f)
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                Log.d(TAG, "Audio focus lost permanently")
+                hasAudioFocus = false
+                wasPlayingBeforeFocusLoss = _isPlaying.value
+                pause()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                Log.d(TAG, "Audio focus lost temporarily")
+                hasAudioFocus = false
+                wasPlayingBeforeFocusLoss = _isPlaying.value
+                pause()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                Log.d(TAG, "Audio focus lost - can duck")
+                // Lower volume instead of pausing
+                mediaPlayer?.setVolume(0.2f, 0.2f)
+            }
+        }
+    }
     
     // Current track state
     private var currentTrack: TrackInfo? = null
@@ -176,10 +220,16 @@ class MusicPlayerService(
     }
     
     /**
-     * Start playback
+     * Start playback with audio focus management
      */
     fun play() {
         try {
+            // Request audio focus before starting playback
+            if (!requestAudioFocus()) {
+                Log.w(TAG, "Could not gain audio focus, not starting playback")
+                return
+            }
+            
             mediaPlayer?.let { player ->
                 if (!player.isPlaying) {
                     player.start()
@@ -367,14 +417,63 @@ class MusicPlayerService(
     }
     
     /**
-     * Release resources
+     * Release resources and abandon audio focus
      */
     fun release() {
         stop()
+        abandonAudioFocus()
         mediaPlayer?.release()
         mediaPlayer = null
         serviceScope.cancel()
         Log.d(TAG, "MusicPlayerService released")
+    }
+    
+    /**
+     * Request audio focus for music playback
+     */
+    private fun requestAudioFocus(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (audioFocusRequest == null) {
+                audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                    .build()
+            }
+            
+            val result = audioManager.requestAudioFocus(audioFocusRequest!!)
+            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            hasAudioFocus
+        } else {
+            @Suppress("DEPRECATION")
+            val result = audioManager.requestAudioFocus(
+                audioFocusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            )
+            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            hasAudioFocus
+        }
+    }
+    
+    /**
+     * Abandon audio focus
+     */
+    private fun abandonAudioFocus() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { request ->
+                audioManager.abandonAudioFocusRequest(request)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(audioFocusChangeListener)
+        }
+        hasAudioFocus = false
     }
     
     private fun startProgressUpdates() {
@@ -492,16 +591,73 @@ class MusicPlayerService(
             if (totalPlayedTime > 0) {
                 val playPercentage = (totalPlayedTime.toFloat() / track.duration.toFloat()).coerceAtMost(1.0f)
                 
+                // Calculate listening context data
+                val currentTime = System.currentTimeMillis()
+                val calendar = java.util.Calendar.getInstance().apply { timeInMillis = currentTime }
+                
+                // Time of day bucket
+                val hourOfDay = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+                val timeOfDayBucket = when (hourOfDay) {
+                    in 6..11 -> com.bitchat.android.music.model.TimeOfDayBucket.MORNING
+                    in 12..17 -> com.bitchat.android.music.model.TimeOfDayBucket.AFTERNOON
+                    in 18..21 -> com.bitchat.android.music.model.TimeOfDayBucket.EVENING
+                    else -> com.bitchat.android.music.model.TimeOfDayBucket.NIGHT
+                }
+                
+                // Day of week
+                val dayOfWeekValue = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+                val dayOfWeek = com.bitchat.android.music.model.DayOfWeek.fromCalendarDay(dayOfWeekValue)
+                
+                // Session duration (total time from start to now)
+                val sessionDuration = if (playbackStartTime > 0) {
+                    ((currentTime - playbackStartTime) / 1000).toInt()
+                } else totalPlayedTime
+                
+                // Playback mode
+                val playbackMode = when {
+                    _isShuffleMode.value -> com.bitchat.android.music.model.PlaybackMode.SHUFFLE
+                    _repeatMode.value == RepeatMode.ONE -> com.bitchat.android.music.model.PlaybackMode.REPEAT_ONE
+                    _repeatMode.value == RepeatMode.ALL -> com.bitchat.android.music.model.PlaybackMode.REPEAT_ALL
+                    else -> com.bitchat.android.music.model.PlaybackMode.SEQUENTIAL
+                }
+                
+                // Volume level (get current system volume)
+                val volumeLevelAvg = try {
+                    val currentVolume = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                    val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                    if (maxVolume > 0) currentVolume.toFloat() / maxVolume.toFloat() else 0.5f
+                } catch (e: Exception) {
+                    0.5f // Default to 50% if unable to get volume
+                }
+                
+                // Audio output type
+                val audioOutputType = try {
+                    when {
+                        audioManager.isBluetoothA2dpOn -> com.bitchat.android.music.model.AudioOutputType.BLUETOOTH_HEADPHONES
+                        audioManager.isWiredHeadsetOn -> com.bitchat.android.music.model.AudioOutputType.WIRED_HEADPHONES
+                        else -> com.bitchat.android.music.model.AudioOutputType.SPEAKER
+                    }
+                } catch (e: Exception) {
+                    com.bitchat.android.music.model.AudioOutputType.UNKNOWN
+                }
+                
                 val record = PlaybackRecord(
                     contentId = track.contentId,
                     deviceId = deviceIdentificationService.getDeviceId(),
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = currentTime,
                     durationPlayed = totalPlayedTime,
                     trackDuration = track.duration,
                     playPercentage = playPercentage,
                     skipCount = skipCount,
                     repeatFlag = (_repeatMode.value != RepeatMode.OFF),
-                    sourceType = track.sourceType
+                    sourceType = track.sourceType,
+                    // New listening context fields
+                    timeOfDayBucket = timeOfDayBucket,
+                    dayOfWeek = dayOfWeek,
+                    sessionDuration = sessionDuration,
+                    playbackMode = playbackMode,
+                    volumeLevelAvg = volumeLevelAvg,
+                    audioOutputType = audioOutputType
                 )
                 
                 // Sign the record

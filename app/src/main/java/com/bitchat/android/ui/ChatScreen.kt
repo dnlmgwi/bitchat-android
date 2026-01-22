@@ -38,7 +38,10 @@ import com.bitchat.android.ui.media.FullScreenImageViewer
  * - ChatUIUtils: Utility functions for formatting and colors
  */
 @Composable
-fun ChatScreen(viewModel: ChatViewModel) {
+fun ChatScreen(
+    viewModel: ChatViewModel,
+    isPlayerVisible: Boolean = false
+) {
     val colorScheme = MaterialTheme.colorScheme
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val connectedPeers by viewModel.connectedPeers.collectAsStateWithLifecycle()
@@ -121,6 +124,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.ime) // This handles keyboard insets
                 .windowInsetsPadding(WindowInsets.navigationBars) // Add bottom padding when keyboard is not expanded
+                .padding(bottom = if (isPlayerVisible) 80.dp else 0.dp) // Add padding for music widget
         ) {
             // Header spacer - creates exact space for the floating header (status bar + compact header)
             Spacer(

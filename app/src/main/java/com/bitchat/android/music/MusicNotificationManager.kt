@@ -318,13 +318,29 @@ class MusicNotificationManager(
         Log.d(TAG, "Handling notification action: $action")
         
         when (action) {
-            ACTION_PLAY -> musicPlayerService.play()
-            ACTION_PAUSE -> musicPlayerService.pause()
+            ACTION_PLAY -> {
+                musicPlayerService.play()
+                // Ensure foreground service is running
+                val intent = Intent(context, MusicForegroundService::class.java)
+                intent.action = MusicForegroundService.ACTION_START_PLAYBACK
+                context.startService(intent)
+            }
+            ACTION_PAUSE -> {
+                musicPlayerService.pause()
+                // Keep foreground service running but update notification
+                val intent = Intent(context, MusicForegroundService::class.java)
+                intent.action = MusicForegroundService.ACTION_PAUSE_PLAYBACK
+                context.startService(intent)
+            }
             ACTION_NEXT -> musicPlayerService.next()
             ACTION_PREVIOUS -> musicPlayerService.previous()
             ACTION_STOP -> {
                 musicPlayerService.stop()
                 hideNotification()
+                // Stop the foreground service
+                val intent = Intent(context, MusicForegroundService::class.java)
+                intent.action = MusicForegroundService.ACTION_STOP_PLAYBACK
+                context.startService(intent)
             }
         }
     }

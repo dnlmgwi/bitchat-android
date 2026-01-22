@@ -291,14 +291,12 @@ class MainActivity : OrientationAwareActivity() {
                 // Set up back navigation handling for the main navigation screen
                 val backCallback = object : OnBackPressedCallback(true) {
                     override fun handleOnBackPressed() {
-                        // Let ChatViewModel handle navigation state
+                        // Let ChatViewModel handle navigation state first
                         val handled = chatViewModel.handleBackPressed()
                         if (!handled) {
-                            // If ChatViewModel doesn't handle it, disable this callback
-                            // and let the system handle it (which will exit the app)
-                            this.isEnabled = false
-                            onBackPressedDispatcher.onBackPressed()
-                            this.isEnabled = true
+                            // If ChatViewModel doesn't handle it, minimize the app instead of closing
+                            Log.d("MainActivity", "Back pressed - minimizing app to background")
+                            moveTaskToBack(true)
                         }
                     }
                 }

@@ -124,7 +124,7 @@ class AggregatorDataExporter(private val context: Context) {
     }
     
     /**
-     * Export comprehensive analytics report (all data types combined)
+     * Export comprehensive analytics report (all data types in one file with multiple sheets/sections)
      */
     suspend fun exportComprehensiveReport(
         playbackRecords: List<PlaybackRecord>,
@@ -148,7 +148,7 @@ class AggregatorDataExporter(private val context: Context) {
                     playbackRecords, sharingRecords, trackMetadata, file
                 )
                 ExportFormat.CSV -> {
-                    // For CSV comprehensive, create a single file with all data sections
+                    // For CSV comprehensive, create a single file with multiple data sections (sheets)
                     exportComprehensiveReportToCSV(playbackRecords, sharingRecords, trackMetadata, file)
                 }
             }
@@ -174,8 +174,8 @@ class AggregatorDataExporter(private val context: Context) {
             Log.d(TAG, "Exporting ${records.size} playback records to CSV: ${file.absolutePath}")
             
             FileWriter(file).use { writer ->
-                // Header
-                writer.append("record_id,content_id,device_id,timestamp,duration_played,track_duration,play_percentage,skip_count,repeat_flag,source_type\n")
+                // Header with all fields including listening context data
+                writer.append("record_id,content_id,device_id,timestamp,duration_played,track_duration,play_percentage,skip_count,repeat_flag,source_type,time_of_day_bucket,day_of_week,session_duration,playback_mode,volume_level_avg,audio_output_type\n")
                 
                 // Data rows
                 records.forEach { record ->
@@ -188,7 +188,13 @@ class AggregatorDataExporter(private val context: Context) {
                     writer.append("${record.playPercentage},")
                     writer.append("${record.skipCount},")
                     writer.append("${record.repeatFlag},")
-                    writer.append("${record.sourceType}\n")
+                    writer.append("${record.sourceType},")
+                    writer.append("${record.timeOfDayBucket},")
+                    writer.append("${record.dayOfWeek},")
+                    writer.append("${record.sessionDuration},")
+                    writer.append("${record.playbackMode},")
+                    writer.append("${record.volumeLevelAvg},")
+                    writer.append("${record.audioOutputType}\n")
                 }
             }
             
@@ -262,19 +268,23 @@ class AggregatorDataExporter(private val context: Context) {
         file: File
     ) {
         try {
-            Log.d(TAG, "Exporting comprehensive report to CSV: ${file.absolutePath}")
+            Log.d(TAG, "Exporting comprehensive report to CSV with multiple sheets: ${file.absolutePath}")
             
             FileWriter(file).use { writer ->
-                // Header with summary
+                // File header with export information
                 writer.append("# Comprehensive Music Analytics Export\n")
-                writer.append("# Generated on: ${dateFormat.format(Date())}\n")
-                writer.append("# Total Playback Records: ${playbackRecords.size}\n")
-                writer.append("# Total Sharing Records: ${sharingRecords.size}\n")
-                writer.append("# Total Track Metadata: ${trackMetadata.size}\n")
+                writer.append("# Generated: ${dateFormat.format(Date())}\n")
+                writer.append("# Total Records: ${playbackRecords.size + sharingRecords.size + trackMetadata.size}\n")
+                writer.append("# \n")
+                writer.append("# This file contains multiple data sheets separated by sheet markers\n")
+                writer.append("# Import instructions: Use sheet markers to split data when importing\n")
+                writer.append("# \n")
                 writer.append("\n")
                 
-                // Playback Records Section
-                writer.append("=== PLAYBACK RECORDS ===\n")
+                // Sheet 1: Playback Records
+                writer.append("### SHEET: Playback_Records ###\n")
+                writer.append("# Records: ${playbackRecords.size}\n")
+                writer.append("# Description: Detailed playback analytics with listening context data\n")
                 writer.append("record_id,content_id,device_id,timestamp,duration_played,track_duration,play_percentage,skip_count,repeat_flag,source_type,time_of_day_bucket,day_of_week,session_duration,playback_mode,volume_level_avg,audio_output_type\n")
                 
                 playbackRecords.forEach { record ->
@@ -296,10 +306,12 @@ class AggregatorDataExporter(private val context: Context) {
                     writer.append("${record.audioOutputType}\n")
                 }
                 
-                writer.append("\n")
+                writer.append("\n\n")
                 
-                // Sharing Records Section
-                writer.append("=== SHARING RECORDS ===\n")
+                // Sheet 2: Sharing Records
+                writer.append("### SHEET: Sharing_Records ###\n")
+                writer.append("# Records: ${sharingRecords.size}\n")
+                writer.append("# Description: Music sharing and transfer activity\n")
                 writer.append("record_id,content_id,sharer_device_id,recipient_device_id,timestamp,file_size,share_method\n")
                 
                 sharingRecords.forEach { record ->
@@ -312,10 +324,12 @@ class AggregatorDataExporter(private val context: Context) {
                     writer.append("${record.shareMethod}\n")
                 }
                 
-                writer.append("\n")
+                writer.append("\n\n")
                 
-                // Track Metadata Section
-                writer.append("=== TRACK METADATA ===\n")
+                // Sheet 3: Track Metadata
+                writer.append("### SHEET: Track_Metadata ###\n")
+                writer.append("# Records: ${trackMetadata.size}\n")
+                writer.append("# Description: Track information and metadata\n")
                 writer.append("content_id,title,artist,album,duration,first_seen\n")
                 
                 trackMetadata.forEach { track ->
@@ -326,9 +340,74 @@ class AggregatorDataExporter(private val context: Context) {
                     writer.append("${track.duration},")
                     writer.append("${dateFormat.format(Date(track.firstSeen))}\n")
                 }
+                
+                writer.append("\n\n")
+                
+                // Sheet 4: Summary Statistics
+                writer.append("### SHEET: Summary_Statistics ###\n")
+                writer.append("# Records: Summary data\n")
+                writer.append("# Description: Aggregated statistics and insights\n")
+                writer.append("metric,value,description\n")
+                
+                // Calculate summary statistics
+                val totalPlayTime = playbackRecords.sumOf { it.durationPlayed }
+                val avgPlayPercentage = if (playbackRecords.isNotEmpty()) {
+                    playbackRecords.map { it.playPercentage }.average()
+                } else 0.0
+                val qualifyingPlays = playbackRecords.count { it.qualifiesForRoyalty() }
+                val uniqueTracks = playbackRecords.map { it.contentId }.distinct().size
+                val totalShares = sharingRecords.size
+                val totalTracksInLibrary = trackMetadata.size
+                
+                // Time-based insights
+                val morningPlays = playbackRecords.count { it.timeOfDayBucket.name == "MORNING" }
+                val afternoonPlays = playbackRecords.count { it.timeOfDayBucket.name == "AFTERNOON" }
+                val eveningPlays = playbackRecords.count { it.timeOfDayBucket.name == "EVENING" }
+                val nightPlays = playbackRecords.count { it.timeOfDayBucket.name == "NIGHT" }
+                
+                val weekdayPlays = playbackRecords.count { it.dayOfWeek.name == "WEEKDAY" }
+                val weekendPlays = playbackRecords.count { it.dayOfWeek.name == "WEEKEND" }
+                
+                // Playback mode insights
+                val sequentialPlays = playbackRecords.count { it.playbackMode.name == "SEQUENTIAL" }
+                val shufflePlays = playbackRecords.count { it.playbackMode.name == "SHUFFLE" }
+                val repeatPlays = playbackRecords.count { it.repeatFlag }
+                
+                // Audio output insights
+                val speakerPlays = playbackRecords.count { it.audioOutputType.name == "SPEAKER" }
+                val headphoneePlays = playbackRecords.count { 
+                    it.audioOutputType.name == "WIRED_HEADPHONES" || it.audioOutputType.name == "BLUETOOTH_HEADPHONES" 
+                }
+                
+                // Write summary statistics
+                writer.append("Total Playback Records,${playbackRecords.size},Number of individual playback events\n")
+                writer.append("Total Play Time (seconds),${totalPlayTime},Total seconds of music played\n")
+                writer.append("Total Play Time (hours),${totalPlayTime / 3600.0},Total hours of music played\n")
+                writer.append("Average Play Percentage,${String.format("%.2f", avgPlayPercentage * 100)}%,Average percentage of tracks completed\n")
+                writer.append("Qualifying Plays,${qualifyingPlays},Plays that qualify for royalty (30s or 50% of track)\n")
+                writer.append("Unique Tracks Played,${uniqueTracks},Number of different tracks played\n")
+                writer.append("Total Sharing Records,${totalShares},Number of music sharing events\n")
+                writer.append("Total Tracks in Library,${totalTracksInLibrary},Number of tracks in music library\n")
+                writer.append("\n")
+                writer.append("Morning Plays,${morningPlays},Plays between 6AM-12PM\n")
+                writer.append("Afternoon Plays,${afternoonPlays},Plays between 12PM-6PM\n")
+                writer.append("Evening Plays,${eveningPlays},Plays between 6PM-12AM\n")
+                writer.append("Night Plays,${nightPlays},Plays between 12AM-6AM\n")
+                writer.append("\n")
+                writer.append("Weekday Plays,${weekdayPlays},Plays on Monday-Friday\n")
+                writer.append("Weekend Plays,${weekendPlays},Plays on Saturday-Sunday\n")
+                writer.append("\n")
+                writer.append("Sequential Plays,${sequentialPlays},Tracks played in order\n")
+                writer.append("Shuffle Plays,${shufflePlays},Tracks played in random order\n")
+                writer.append("Repeat Plays,${repeatPlays},Tracks played with repeat enabled\n")
+                writer.append("\n")
+                writer.append("Speaker Plays,${speakerPlays},Plays through device speakers\n")
+                writer.append("Headphone Plays,${headphoneePlays},Plays through headphones (wired or Bluetooth)\n")
+                
+                writer.append("\n### END OF EXPORT ###\n")
             }
             
-            Log.d(TAG, "Successfully exported comprehensive CSV: ${file.absolutePath} (${file.length()} bytes)")
+            Log.d(TAG, "Successfully exported comprehensive CSV with multiple sheets: ${file.absolutePath} (${file.length()} bytes)")
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to export comprehensive CSV: ${file.absolutePath}", e)

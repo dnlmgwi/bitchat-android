@@ -30,6 +30,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Location foreground service type required for BLE scanning in background -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Media playback foreground service type for background music playback -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     
     <!-- Microphone for voice notes -->
@@ -108,6 +110,14 @@
             android:name=".service.MeshForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|dataSync|location"
+            tools:ignore="DataExtractionRules">
+        </service>
+
+        <!-- Music playback foreground service -->
+        <service
+            android:name=".music.MusicForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
             tools:ignore="DataExtractionRules">
         </service>
 
