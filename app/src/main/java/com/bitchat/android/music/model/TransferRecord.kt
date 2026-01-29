@@ -21,7 +21,11 @@ data class TransferRecord(
     val fileSize: Long, // Size of transferred file in bytes
     val transferStatus: TransferStatus = TransferStatus.INITIATED,
     val transferDuration: Long? = null, // Time taken for transfer (if completed)
-    val deviceSignature: ByteArray? = null // Ed25519 signature for verification
+    val deviceSignature: ByteArray? = null, // Ed25519 signature for verification
+    
+    // Local sync status (not transmitted)
+    val isSynced: Boolean = false,
+    val syncedAt: Long? = null
 ) : Parcelable {
 
     /**

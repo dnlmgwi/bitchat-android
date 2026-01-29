@@ -3,6 +3,8 @@ package com.bitchat.android.music
 import android.content.Context
 import android.util.Log
 import com.bitchat.android.mesh.BluetoothMeshService
+import com.bitchat.android.mesh.PacketProcessor
+import com.bitchat.android.model.RoutedPacket
 import com.bitchat.android.music.model.*
 import com.bitchat.android.protocol.BitchatPacket
 import com.bitchat.android.protocol.MessageType
@@ -21,9 +23,11 @@ interface MusicAnalyticsMeshSyncInterface {
     suspend fun syncTrackMetadata(metadata: List<TrackMetadata>)
     suspend fun syncSharingRecords(records: List<SharingRecord>)
     suspend fun syncTransferRecords(records: List<TransferRecord>)
+
     fun startAggregatorDiscovery()
     fun stopAggregatorDiscovery()
     fun release()
+    fun setTracker(tracker: PlaybackAnalyticsTracker)
 }
 
 /**
@@ -35,7 +39,13 @@ class MusicAnalyticsMeshSync(
     private val context: Context,
     private val meshService: BluetoothMeshService,
     private val deviceIdentificationService: DeviceIdentificationService
-) : MusicAnalyticsMeshSyncInterface {
+) : MusicAnalyticsMeshSyncInterface, PacketProcessor.PacketListener {
+    
+    private var analyticsTracker: PlaybackAnalyticsTracker? = null
+
+    override fun setTracker(tracker: PlaybackAnalyticsTracker) {
+        this.analyticsTracker = tracker
+    }
     
     companion object {
         private const val TAG = "MusicAnalyticsMeshSync"
@@ -94,6 +104,7 @@ class MusicAnalyticsMeshSync(
     }
     
     override fun release() {
+        meshService.removePacketListener(this)
         syncScope.cancel()
     }
     
@@ -430,15 +441,66 @@ class MusicAnalyticsMeshSync(
     }
     
     private fun registerMessageHandlers() {
-        // Register handlers for music analytics message types
-        // This would integrate with the existing mesh service message handling
-        // For now, we'll use a simplified approach
-        
+        // Register as a packet listener to receive analytics data
+        meshService.addPacketListener(this)
+    }
+    
+    override fun onPacketReceived(routed: RoutedPacket) {
         syncScope.launch {
-            // Handle incoming aggregator beacons
-            // Handle sync acknowledgments
-            // Handle playback batch messages (if we're an aggregator)
-            // This would be integrated with the existing BluetoothMeshService delegate pattern
+            onAnalyticsPacketReceived(routed.packet)
+        }
+    }
+    
+    /**
+     * Called by BluetoothMeshService when an analytics packet is valid and received
+     */
+    suspend fun onAnalyticsPacketReceived(packet: BitchatPacket) {
+        try {
+           when (packet.type.toInt()) {
+               MessageType.PLAYBACK_BATCH.value.toInt() -> {
+                   PlaybackBatchMessage.fromBinaryPayload(packet.payload)?.let { message ->
+                        Log.d(TAG, "Received playback batch from ${message.deviceId} with ${message.records.size} records")
+                       analyticsTracker?.let { tracker ->
+                           message.records.forEach { record ->
+                               // Tag as synced so we don't re-export or re-sync back
+                               val syncedRecord = record.copy(isSynced = true, syncedAt = System.currentTimeMillis())
+                               tracker.recordPlayback(syncedRecord)
+                           }
+                       }
+                   }
+               }
+               MessageType.SHARING_RECORD.value.toInt() -> {
+                   SharingRecordMessage.fromBinaryPayload(packet.payload)?.let { message ->
+                       Log.d(TAG, "Received sharing record: ${message.record.recordId}")
+                       analyticsTracker?.let { tracker ->
+                           val syncedRecord = message.record.copy(isSynced = true, syncedAt = System.currentTimeMillis())
+                           tracker.recordSharing(syncedRecord)
+                       }
+                   }
+               }
+               MessageType.TRACK_META.value.toInt() -> {
+                   TrackMetaMessage.fromBinaryPayload(packet.payload)?.let { message ->
+                        Log.d(TAG, "Received track meta: ${message.metadata.title}")
+                       analyticsTracker?.let { tracker ->
+                           val syncedMeta = message.metadata.copy(isSynced = true, syncedAt = System.currentTimeMillis())
+                           tracker.recordTrackMetadata(syncedMeta)
+                       }
+                   }
+               }
+               MessageType.TRANSFER_BATCH.value.toInt() -> {
+                   TransferBatchMessage.fromBinaryPayload(packet.payload)?.let { message ->
+                        Log.d(TAG, "Received transfer batch from ${message.deviceId} with ${message.records.size} records")
+                       analyticsTracker?.let { tracker ->
+                           message.records.forEach { record ->
+                               val syncedRecord = record.copy(isSynced = true, syncedAt = System.currentTimeMillis())
+                               tracker.recordTransfer(syncedRecord)
+                           }
+                       }
+                   }
+               }
+           }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing analytics packet", e)
         }
     }
     

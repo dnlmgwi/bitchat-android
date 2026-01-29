@@ -6,8 +6,11 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.bitchat.android.music.AggregatedDataSyncManager
 import com.bitchat.android.music.AggregatorDataExporter
+import com.bitchat.android.music.DeviceIdentificationService
 import com.bitchat.android.music.PlaybackAnalyticsTracker
+import com.bitchat.android.service.MeshServiceHolder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,11 +23,60 @@ class AggregatorModeViewModel(application: Application) : AndroidViewModel(appli
     private val analyticsTracker = PlaybackAnalyticsTracker.getInstance(application)
     private val dataExporter = AggregatorDataExporter(application)
     
-    private val _dataCounts = MutableStateFlow(DataCounts())
-    val dataCounts: StateFlow<DataCounts> = _dataCounts.asStateFlow()
+    // Aggregated data sync manager for inter-aggregator communication
+    private var aggregatedDataSyncManager: AggregatedDataSyncManager? = null
+    
+    private val _dataCounts = MutableStateFlow(com.bitchat.android.music.DataCounts())
+    val dataCounts: StateFlow<com.bitchat.android.music.DataCounts> = _dataCounts.asStateFlow()
+    
+    // Sync status from AggregatedDataSyncManager
+    private val _syncStatus = MutableStateFlow<AggregatedDataSyncManager.AggregatorSyncStatus?>(null)
+    val syncStatus: StateFlow<AggregatedDataSyncManager.AggregatorSyncStatus?> = _syncStatus.asStateFlow()
+    
+    // Discovered peer aggregators
+    private val _discoveredAggregators = MutableStateFlow<Map<String, com.bitchat.android.music.AggregatedDataAnnouncement>>(emptyMap())
+    val discoveredAggregators: StateFlow<Map<String, com.bitchat.android.music.AggregatedDataAnnouncement>> = _discoveredAggregators.asStateFlow()
     
     init {
         refreshDataCounts()
+        initializeAggregatedDataSync()
+    }
+    
+    private fun initializeAggregatedDataSync() {
+        viewModelScope.launch {
+            try {
+                val context = getApplication<Application>()
+                val meshService = MeshServiceHolder.getOrCreate(context)
+                val deviceIdService = DeviceIdentificationService(context)
+                
+                aggregatedDataSyncManager = AggregatedDataSyncManager(
+                    context = context,
+                    meshService = meshService,
+                    deviceIdentificationService = deviceIdService,
+                    analyticsTracker = analyticsTracker
+                )
+                
+                // Collect sync status updates
+                launch {
+                    aggregatedDataSyncManager?.syncStatus?.collect { status ->
+                        _syncStatus.value = status
+                    }
+                }
+                
+                // Collect discovered aggregators
+                launch {
+                    aggregatedDataSyncManager?.discoveredAggregators?.collect { aggregators ->
+                        _discoveredAggregators.value = aggregators
+                    }
+                }
+                
+                // Start aggregator sync
+                aggregatedDataSyncManager?.startAggregatorSync()
+                
+            } catch (e: Exception) {
+                android.util.Log.e("AggregatorModeViewModel", "Error initializing aggregated data sync", e)
+            }
+        }
     }
     
     fun refreshDataCounts() {
@@ -33,16 +85,66 @@ class AggregatorModeViewModel(application: Application) : AndroidViewModel(appli
                 val playbackRecords = analyticsTracker.getAllPlaybackRecords()
                 val sharingRecords = analyticsTracker.getAllSharingRecords()
                 val trackMetadata = analyticsTracker.getAllTrackMetadata()
+                val transferRecords = analyticsTracker.getAllTransferRecords()
                 
-                _dataCounts.value = DataCounts(
+                _dataCounts.value = com.bitchat.android.music.DataCounts(
                     playbackRecords = playbackRecords.size,
                     sharingRecords = sharingRecords.size,
-                    trackMetadata = trackMetadata.size
+                    trackMetadata = trackMetadata.size,
+                    transferRecords = transferRecords.size
                 )
             } catch (e: Exception) {
                 // Handle error - could emit error state
-                _dataCounts.value = DataCounts()
+                _dataCounts.value = com.bitchat.android.music.DataCounts()
             }
+        }
+    }
+    
+    /**
+     * Request aggregated data from a peer aggregator
+     */
+    fun requestDataFromPeer(peerId: String) {
+        viewModelScope.launch {
+            try {
+                aggregatedDataSyncManager?.requestAggregatedDataFromPeer(peerId)
+            } catch (e: Exception) {
+                android.util.Log.e("AggregatorModeViewModel", "Error requesting data from peer", e)
+            }
+        }
+    }
+    
+    /**
+     * Broadcast availability of our aggregated data to nearby aggregators
+     */
+    fun broadcastDataAvailability() {
+        viewModelScope.launch {
+            try {
+                aggregatedDataSyncManager?.broadcastAggregatedDataAvailability()
+            } catch (e: Exception) {
+                android.util.Log.e("AggregatorModeViewModel", "Error broadcasting availability", e)
+            }
+        }
+    }
+    
+    /**
+     * Export all aggregated data including transfer records
+     */
+    suspend fun exportAllAggregatedData(format: AggregatorDataExporter.ExportFormat): AggregatorDataExporter.ExportResult {
+        return try {
+            aggregatedDataSyncManager?.exportAllAggregatedData(format)
+                ?: AggregatorDataExporter.ExportResult(
+                    success = false,
+                    filePath = null,
+                    recordCount = 0,
+                    error = "Aggregated data sync manager not initialized"
+                )
+        } catch (e: Exception) {
+            AggregatorDataExporter.ExportResult(
+                success = false,
+                filePath = null,
+                recordCount = 0,
+                error = e.message
+            )
         }
     }
     
@@ -64,13 +166,12 @@ class AggregatorModeViewModel(application: Application) : AndroidViewModel(appli
                     val tracks = analyticsTracker.getAllTrackMetadata()
                     dataExporter.exportTrackMetadata(tracks, format)
                 }
+                ExportDataType.TRANSFER_RECORDS -> {
+                    val records = analyticsTracker.getAllTransferRecords()
+                    dataExporter.exportTransferRecords(records, format)
+                }
                 ExportDataType.COMPREHENSIVE -> {
-                    val playbackRecords = analyticsTracker.getAllPlaybackRecords()
-                    val sharingRecords = analyticsTracker.getAllSharingRecords()
-                    val trackMetadata = analyticsTracker.getAllTrackMetadata()
-                    dataExporter.exportComprehensiveReport(
-                        playbackRecords, sharingRecords, trackMetadata, format
-                    )
+                    exportAllAggregatedData(format)
                 }
             }
         } catch (e: Exception) {
@@ -113,6 +214,7 @@ class AggregatorModeViewModel(application: Application) : AndroidViewModel(appli
                         "json" -> "application/json"
                         "xml" -> "application/xml"
                         "csv" -> "text/csv"
+                        "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         else -> "text/plain"
                     }
                     putExtra(Intent.EXTRA_STREAM, uri)
@@ -151,6 +253,7 @@ class AggregatorModeViewModel(application: Application) : AndroidViewModel(appli
                             "json" -> "application/json"
                             "xml" -> "application/xml"
                             "csv" -> "text/csv"
+                            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             else -> "text/plain"
                         }
                         putExtra(Intent.EXTRA_STREAM, cacheUri)
@@ -203,6 +306,7 @@ class AggregatorModeViewModel(application: Application) : AndroidViewModel(appli
                     "json" -> "application/json"
                     "xml" -> "application/xml"
                     "csv" -> "text/csv"
+                    "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     else -> "text/plain"
                 })
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -245,5 +349,6 @@ class AggregatorModeViewModel(application: Application) : AndroidViewModel(appli
 data class DataCounts(
     val playbackRecords: Int = 0,
     val sharingRecords: Int = 0,
-    val trackMetadata: Int = 0
+    val trackMetadata: Int = 0,
+    val transferRecords: Int = 0
 )

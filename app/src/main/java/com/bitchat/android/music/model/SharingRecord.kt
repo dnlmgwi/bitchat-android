@@ -22,7 +22,11 @@ data class SharingRecord(
     val transferDuration: Long? = null, // Time taken for transfer (if completed)
     val transferStatus: com.bitchat.android.music.model.TransferStatus = com.bitchat.android.music.model.TransferStatus.INITIATED,
     val shareContext: ShareContext = ShareContext.MANUAL,
-    val deviceSignature: ByteArray? = null // Ed25519 signature for verification
+    val deviceSignature: ByteArray? = null, // Ed25519 signature for verification
+    
+    // Local sync status (not transmitted)
+    val isSynced: Boolean = false,
+    val syncedAt: Long? = null
 ) : Parcelable {
 
     /**

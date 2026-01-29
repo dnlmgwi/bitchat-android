@@ -718,6 +718,25 @@ class BluetoothMeshService(private val context: Context) {
     /**
      * Send public message
      */
+
+
+    /**
+     * Add a packet listener to observe incoming packets
+     */
+    fun addPacketListener(listener: PacketProcessor.PacketListener) {
+        packetProcessor.addListener(listener)
+    }
+
+    /**
+     * Remove a packet listener
+     */
+    fun removePacketListener(listener: PacketProcessor.PacketListener) {
+        packetProcessor.removeListener(listener)
+    }
+
+    /**
+     * Send public message
+     */
     fun sendMessage(content: String, mentions: List<String> = emptyList(), channel: String? = null) {
         if (content.isEmpty()) return
         

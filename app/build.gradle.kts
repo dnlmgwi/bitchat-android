@@ -150,6 +150,10 @@ dependencies {
     
     // EXIF orientation handling for images
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+
+    // Excel Export (Apache POI)
+    implementation("org.apache.poi:poi:5.2.5")
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
     
     // Testing
     testImplementation(libs.bundles.testing)

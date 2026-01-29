@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bitchat.android.music.AggregatedDataSyncManager
 import com.bitchat.android.music.AggregatorDataExporter
 import com.bitchat.android.service.AggregatorModeManager
 import kotlinx.coroutines.launch
@@ -220,19 +221,24 @@ fun AggregatorModeScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     DataCountItem(
-                        label = "Playback Records",
+                        label = "Playback",
                         count = dataCounts.playbackRecords,
                         icon = Icons.Default.PlayArrow
                     )
                     DataCountItem(
-                        label = "Sharing Records", 
+                        label = "Sharing", 
                         count = dataCounts.sharingRecords,
                         icon = Icons.Default.Share
                     )
                     DataCountItem(
-                        label = "Track Metadata",
+                        label = "Tracks",
                         count = dataCounts.trackMetadata,
                         icon = Icons.Default.MusicNote
+                    )
+                    DataCountItem(
+                        label = "Transfers",
+                        count = dataCounts.transferRecords,
+                        icon = Icons.Default.Sync
                     )
                 }
                 
@@ -346,6 +352,109 @@ fun AggregatorModeScreen(
             }
         }
         
+        // Peer Aggregators Section
+        val discoveredAggregators by viewModel.discoveredAggregators.collectAsState()
+        val syncStatus by viewModel.syncStatus.collectAsState()
+        
+        if (discoveredAggregators.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Discovered Aggregators",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    discoveredAggregators.values.forEach { announcement ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = announcement.aggregatorId.take(12) + "...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "${announcement.recordCounts.playbackRecords} playback, ${announcement.recordCounts.sharingRecords} sharing",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            Button(
+                                onClick = { 
+                                    scope.launch {
+                                        viewModel.requestDataFromPeer(announcement.aggregatorId)
+                                    }
+                                },
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text("Sync", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Sync Status
+        syncStatus?.let { status ->
+            when (status) {
+                is AggregatedDataSyncManager.AggregatorSyncStatus.Syncing -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Syncing with ${status.peerId.take(8)}...",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            LinearProgressIndicator(
+                                progress = { status.progress },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+                is AggregatedDataSyncManager.AggregatorSyncStatus.Exporting -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Exporting ${status.recordCount} records...",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+                else -> { /* Other states don't need visual indicator */ }
+            }
+        }
+        
         // Instructions Card
         Card(
             modifier = Modifier.fillMaxWidth()
@@ -362,9 +471,10 @@ fun AggregatorModeScreen(
                 
                 val instructions = listOf(
                     "Collects music analytics data from nearby devices via Bluetooth mesh",
-                    "Stores playback records, sharing events, and track metadata locally",
+                    "Syncs aggregated data with other aggregator nodes in the network",
+                    "Stores playback records, sharing events, transfers, and track metadata locally",
                     "Provides export functionality for integration with music industry systems",
-                    "Supports CSV, JSON, and XML formats for maximum compatibility",
+                    "Supports CSV, JSON, XML, and Excel formats for maximum compatibility",
                     "Ideal for burning centers, distribution hubs, and data collection points"
                 )
                 
@@ -518,7 +628,8 @@ enum class ExportDataType(val displayName: String) {
     PLAYBACK_RECORDS("Playback Records Only"),
     SHARING_RECORDS("Sharing Records Only"),
     TRACK_METADATA("Track Metadata Only"),
-    COMPREHENSIVE("Comprehensive Report")
+    TRANSFER_RECORDS("Transfer Records Only"),
+    COMPREHENSIVE("Comprehensive Report (All Data)")
 }
 
 private fun formatUptime(uptimeMs: Long): String {

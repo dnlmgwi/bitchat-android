@@ -366,22 +366,21 @@ class PlaybackAnalyticsTracker private constructor(
                     val meshSync = createMeshSyncManager(context)
                     PlaybackAnalyticsTracker(context.applicationContext, meshSync).also { 
                         INSTANCE = it 
+                        // Connect tracker to sync manager for callbacks
+                        meshSync.setTracker(it)
                     }
                 }
             }
         }
         
         private fun createMeshSyncManager(context: Context): MusicAnalyticsMeshSyncInterface {
-            // This is a simplified approach - in production you'd inject these dependencies
-            // For now, we'll create a basic implementation that can be enhanced later
             return try {
-                // Try to get the actual mesh service if available
-                // Note: BluetoothMeshService doesn't have getInstance, so we'll use stub for now
-                Log.d(TAG, "Creating stub mesh sync manager for development")
-                StubMusicAnalyticsMeshSync(context)
+                Log.d(TAG, "Creating real mesh sync manager")
+                val meshService = com.bitchat.android.service.MeshServiceHolder.getOrCreate(context)
+                val deviceIdService = DeviceIdentificationService(context)
+                MusicAnalyticsMeshSync(context, meshService, deviceIdService)
             } catch (e: Exception) {
                 Log.w(TAG, "Could not create mesh sync manager, using stub", e)
-                // Create a stub implementation for testing/development
                 StubMusicAnalyticsMeshSync(context)
             }
         }
@@ -869,5 +868,9 @@ private class StubMusicAnalyticsMeshSync(private val context: Context) : MusicAn
     
     override fun release() {
         Log.d(TAG, "Stub: Released")
+    }
+
+    override fun setTracker(tracker: PlaybackAnalyticsTracker) {
+        Log.d(TAG, "Stub: setTracker called")
     }
 }

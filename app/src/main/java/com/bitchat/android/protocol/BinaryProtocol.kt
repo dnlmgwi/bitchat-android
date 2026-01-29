@@ -36,7 +36,12 @@ enum class MessageType(val value: UByte) {
     MUSIC_TRANSFER_STATUS(0x3Au), // Transfer status update message
     SHARING_RECORD(0x3Bu), // Individual sharing record for analytics
     SHARING_BATCH(0x3Cu), // Batch of sharing records for analytics
-    TRANSFER_BATCH(0x3Du); // Batch of transfer records for analytics
+    TRANSFER_BATCH(0x3Du), // Batch of transfer records for analytics
+    
+    // Aggregated data sync between aggregators (0x3E-0x3F range)
+    AGGREGATED_DATA_ANNOUNCE(0x3Eu), // Announce availability of aggregated data
+    AGGREGATED_DATA_REQUEST(0x3Fu), // Request aggregated data from peer
+    AGGREGATED_DATA_SYNC(0x40u); // Sync aggregated data bundle
 
     companion object {
         fun fromValue(value: UByte): MessageType? {

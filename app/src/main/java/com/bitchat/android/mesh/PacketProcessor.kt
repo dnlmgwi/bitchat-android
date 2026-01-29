@@ -21,6 +21,20 @@ class PacketProcessor(private val myPeerID: String) {
     companion object {
         private const val TAG = "PacketProcessor"
     }
+
+    interface PacketListener {
+        fun onPacketReceived(routed: RoutedPacket)
+    }
+    
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<PacketListener>()
+
+    fun addListener(listener: PacketListener) {
+        listeners.add(listener)
+    }
+
+    fun removeListener(listener: PacketListener) {
+        listeners.remove(listener)
+    }
     
     // Delegate for callbacks
     var delegate: PacketProcessorDelegate? = null
@@ -140,6 +154,8 @@ class PacketProcessor(private val myPeerID: String) {
             debugManager?.logIncomingPacket(peerID, nick, mt, routeDevice)
         } catch (_: Exception) { }
         
+        // Notify listeners (e.g. Analytics)
+        notifyListeners(routed)
         
         // Handle public packet types (no address check needed)
         when (messageType) {
@@ -293,6 +309,15 @@ class PacketProcessor(private val myPeerID: String) {
         processorScope.cancel()
         
         Log.d(TAG, "PacketProcessor shutdown complete")
+    }
+    private fun notifyListeners(routed: RoutedPacket) {
+        listeners.forEach {
+            try {
+                it.onPacketReceived(routed)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in packet listener", e)
+            }
+        }
     }
 }
 

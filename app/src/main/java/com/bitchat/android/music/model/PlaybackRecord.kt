@@ -30,7 +30,11 @@ data class PlaybackRecord(
     val sessionDuration: Int = 0, // How long user listened in one sitting (seconds)
     val playbackMode: PlaybackMode = PlaybackMode.UNKNOWN, // Shuffle vs sequential vs repeat
     val volumeLevelAvg: Float = 0.0f, // Average volume during playback (0.0-1.0)
-    val audioOutputType: AudioOutputType = AudioOutputType.UNKNOWN // Speaker vs headphones
+    val audioOutputType: AudioOutputType = AudioOutputType.UNKNOWN, // Speaker vs headphones
+    
+    // Local sync status (not transmitted)
+    val isSynced: Boolean = false,
+    val syncedAt: Long? = null
 ) : Parcelable {
 
     /**

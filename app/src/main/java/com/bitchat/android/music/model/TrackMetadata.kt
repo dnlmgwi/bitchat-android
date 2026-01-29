@@ -17,7 +17,11 @@ data class TrackMetadata(
     val album: String? = null, // Album name (if available)
     val duration: Int, // Track duration in seconds
     val audioFingerprint: ByteArray, // Compact audio fingerprint for matching
-    val firstSeen: Long = System.currentTimeMillis() // When track was first encountered
+    val firstSeen: Long = System.currentTimeMillis(), // When track was first encountered
+    
+    // Local sync status (not transmitted)
+    val isSynced: Boolean = false,
+    val syncedAt: Long? = null
 ) : Parcelable {
 
     /**
